@@ -85,6 +85,22 @@ public final class MTransform {
         return new MTransform(tx, ty, tz, sx, sy, sz, q[0], q[1], q[2], q[3]);
     }
 
+    /**
+     * A copy swung by {@code deg} about a WORLD axis running through {@code (px,py,pz)} — both the axis
+     * and the pivot are in the machine's frame, relative to the display's origin. This is how a lever
+     * hinges on its mount and how a reel turns like a drum: the part orbits the pivot AND turns with it,
+     * where {@link #rotatedLocal} would only spin it on the spot.
+     */
+    public MTransform rotatedAbout(float ax, float ay, float az, double deg, float px, float py, float pz) {
+        float len = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+        if (len < 1e-6f) return this;
+        float h = (float) Math.toRadians(deg) / 2f, sn = (float) Math.sin(h) / len, cs = (float) Math.cos(h);
+        float rx = ax * sn, ry = ay * sn, rz = az * sn;
+        float[] d = rotate(rx, ry, rz, cs, tx - px, ty - py, tz - pz);   // orbit the pivot
+        float[] q = mul(rx, ry, rz, cs, qx, qy, qz, qw);                 // world rotation applied on top
+        return new MTransform(px + d[0], py + d[1], pz + d[2], sx, sy, sz, q[0], q[1], q[2], q[3]);
+    }
+
     /** A copy translated by (dx,dy,dz) — used to auto-centre item/text displays. */
     public MTransform translated(float dx, float dy, float dz) {
         return new MTransform(tx + dx, ty + dy, tz + dz, sx, sy, sz, qx, qy, qz, qw);
