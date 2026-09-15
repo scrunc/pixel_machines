@@ -500,17 +500,30 @@ public final class GachaManager {
         v.put("pitch", String.valueOf(ra.pitch())); v.put("sound", ra.sound() == null ? "" : ra.sound()); v.put("fx", ra.fx() == null ? "" : ra.fx());
         v.put("rarity", ra.name()); v.put("rarity_label", ra.label());
         v.put("name", r.entry().name); v.put("player", playerName); v.put("series", spec.title());
-        // slot reels: three symbols. A win is three of the rolled tier's symbol; the bottom tier lands
-        // two-and-a-neighbour, so a common pull still reads as a near miss instead of a jackpot.
+        // Slot reels: what the three drums land on. Three of a kind is the jackpot picture, so only a
+        // genuinely rare tier gets it — otherwise every single pull looks like a win and the drums stop
+        // meaning anything. The tier's own odds decide the picture:
+        //   ≤6% of pulls  → three of a kind
+        //   ≤20%          → a near miss: two of the tier's symbol and one stranger
+        //   commoner      → three different symbols, the tier's among them
         String sym = ra.reelSymbol();
-        v.put("sym", sym); v.put("sym1", sym); v.put("sym2", sym); v.put("sym3", sym);
-        if (spec.isReels() && spec.rank(ra.name()) <= 0) {
-            List<String> order = spec.rarityOrder();
-            for (int i = 1; i < order.size(); i++) {
-                String other = spec.rarity(order.get(i)).reelSymbol();
-                if (other != null && !other.isBlank() && !other.equals(sym)) { v.put("sym3", other); break; }
-            }
+        v.put("sym", sym);
+        List<String> others = new ArrayList<>();
+        for (String rn : spec.rarityOrder()) {
+            String o = spec.rarity(rn).reelSymbol();
+            if (o != null && !o.isBlank() && !o.equals(sym) && !others.contains(o)) others.add(o);
         }
+        java.util.Collections.shuffle(others, rng);
+        double pct = spec.percent(ra.name());
+        String a = sym, b = sym, c = sym;
+        if (others.size() >= 2 && pct > 20) {          // common: no two alike
+            b = others.get(0); c = others.get(1);
+            if (rng.nextBoolean()) { String t = a; a = b; b = t; }   // the tier's symbol is not always first
+        } else if (!others.isEmpty() && pct > 6) {     // uncommon: a near miss on the last drum
+            c = others.get(0);
+            if (rng.nextInt(3) == 0) { String t = b; b = c; c = t; }  // sometimes it is the middle one that breaks it
+        }
+        v.put("sym1", a); v.put("sym2", b); v.put("sym3", c);
         return v;
     }
 
