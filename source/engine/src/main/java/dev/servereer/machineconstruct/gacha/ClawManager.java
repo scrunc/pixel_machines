@@ -344,6 +344,7 @@ public final class ClawManager implements Listener {
             ss.failMode = slipped ? pickSlip(c) : pickFail(c, onPrize);
         }
         s.save();
+        gacha.refreshBoard(ss.m);   // the guarantee counter moved — the board should say so before the claw even lifts
     }
 
     /** Which way it fails. Closing nowhere near a prize can only ever be a clean miss. */

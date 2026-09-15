@@ -82,6 +82,18 @@ public final class PacketDisplay {
 
     private static final int META_TEXT_OPACITY = 26;
 
+    /**
+     * Text displays only: show THIS viewer a different string from everyone else. The machine is one
+     * set of packets per player already, so a board can read each player their own numbers — used for
+     * the gacha machines' "your luck" board. Sends only the content metadata, so position and styling
+     * are untouched.
+     */
+    public void sendTextFor(Player viewer, DisplayContent oneOff) {
+        List<EntityData<?>> data = new ArrayList<>();
+        oneOff.appendMeta(data);
+        send(viewer, new WrapperPlayServerEntityMetadata(entityId, data));
+    }
+
     /** Text displays only: set the text alpha for one viewer (transition effects). */
     public void sendTextOpacity(Player viewer, byte alpha) {
         if (!(content instanceof TextContent)) return;

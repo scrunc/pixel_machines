@@ -266,6 +266,31 @@ every guarantee at or below it and ticks the rest up. The old single form (`pity
 still works, and old files keep their counter (it migrates into the ladder on the next pull). The
 odds screen lists what each guarantee owes that player right now.
 
+**The luck board** — a text part named `pity` (or `pity_*`) on a gacha machine reads every player
+stood in front of it THEIR own guarantees, without anyone opening a menu. It is per-viewer: two
+players at the same cabinet see different numbers. Placeholders, resolved per viewer:
+
+| | |
+|---|---|
+| `{pity}` | `Rare in 3 · Mythic in 64` — every guarantee, coloured by rarity |
+| `{pulls}` | that player's total pulls on this series |
+| `{owned}` / `{total}` | distinct prizes collected / in the series |
+| `{grabs}` | claw only: plays left until the claw is made to hold |
+| `{player}` | their name |
+
+```yaml
+vars:
+  pity: |-
+    ${slate}your luck ${slate}· {pulls} turns
+    {pity}
+model:
+  parts:
+    pity: { text: "${pity}", offset: [...], scale: [0.11, 0.11, 0.11], rotation: [180, 0, 0] }
+```
+
+It refreshes every 1.5 s, and immediately after a pull or a claw attempt, so the counter visibly
+moves while the theatre is still playing. A machine with no `pity` part simply has no board.
+
 **Coins**: the engine ships a ten-tier coin ladder (`plugins/MachineConstruct/coins.yml`: common …
 leviathan, each a tagged coin head — rename / recolour / retexture there). `price: { coins: 1, coin:
 rare }` charges that tier; `/mc coin give <player> <n> <tier>` pays them out (quests, votes, kits);

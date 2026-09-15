@@ -47,6 +47,9 @@ public final class CuePlayer {
 
     // Every tick, not every other: reels want ~20 frames a second, and the clock only does work while
     // a cue is actually running (the first line of tick() leaves immediately when none is).
+    /** The viewer tracker this player pushes through — machines that send per-viewer packets need it too. */
+    public DisplayTracker tracker() { return tracker; }
+
     public void start() { plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L); }
 
     /** One running cue on one machine. */

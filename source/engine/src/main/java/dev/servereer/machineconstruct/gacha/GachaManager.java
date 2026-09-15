@@ -61,6 +61,7 @@ public final class GachaManager {
     private final Map<String, GachaSeries> series = new HashMap<>();
     private final Map<Machine, Waiting> waiting = new HashMap<>();
     private final Map<Machine, Long> lastBroadcast = new HashMap<>();
+    private final Map<Machine, List<PacketDisplay>> boards = new HashMap<>();   // the per-viewer "your luck" text parts
     private final Coins coins;
     public Coins coins() { return coins; }
     private final Random rng = new Random();
@@ -70,6 +71,7 @@ public final class GachaManager {
         this.dir = new File(plugin.getDataFolder(), "gacha");
         this.coins = new Coins(plugin);
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, 20L);
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickBoards, 60L, 30L);
     }
 
     /**
@@ -158,11 +160,20 @@ public final class GachaManager {
         if (spec == null) return;
         series(spec);   // load (or seed) the series as soon as a machine of it stands in the world
         for (String sel : spec.hidden()) for (PacketDisplay d : CuePlayer.select(m, sel)) { d.forceContent(CuePlayer.blank(d)); d.pin(); }
+        List<PacketDisplay> board = CuePlayer.select(m, "pity|pity_*");
+        if (board.isEmpty()) boards.remove(m);
+        else {
+            boards.put(m, board);
+            GachaSeries s = series(spec);
+            for (PacketDisplay d : board)
+                if (d.baseContent() instanceof dev.servereer.machineconstruct.core.TextContent tc)
+                    d.forceContent(tc.withText(fill(tc.template(), spec, s, new GachaSeries.Record(), "")));
+        }
         Waiting w = waiting.remove(m);
         if (w != null) deliver(m, t, w);   // a re-render (theme / reload) eats the parked capsule — hand its items over rather than lose them
     }
 
-    public void forget(Machine m) { waiting.remove(m); cues.forget(m); }
+    public void forget(Machine m) { waiting.remove(m); boards.remove(m); cues.forget(m); }
 
     // --- pull ----------------------------------------------------------------------
 
@@ -191,6 +202,7 @@ public final class GachaManager {
         }
         if (results.isEmpty()) { refund(p, spec, count); p.sendMessage(msg(sk, "empty", "<red>This machine has nothing loaded yet.")); return false; }
         s.save();
+        refreshBoard(m);   // the counters just moved — let the board say so while the cue plays
         Waiting nw = new Waiting(p, results);
         waiting.put(m, nw);
         Result first = results.get(0);
@@ -291,6 +303,43 @@ public final class GachaManager {
         double r2 = spec.broadcastRadius() * spec.broadcastRadius();
         for (Player o : plugin.getServer().getOnlinePlayers())
             if (o.getWorld() == a.getWorld() && o.getLocation().distanceSquared(a) <= r2 && !o.getUniqueId().equals(w.player)) o.sendMessage(line);
+    }
+
+    /**
+     * The "your luck" board: a text part named {@code pity} on a gacha machine reads every nearby player
+     * THEIR own guarantees — how many pulls until each tier is owed them. Per-viewer packets, so two
+     * players stood at the same machine see different numbers, and nobody has to open a menu to find
+     * out that a Mythic is four pulls away.
+     */
+    private void tickBoards() { for (Machine m : boards.keySet().toArray(new Machine[0])) refreshBoard(m); }
+
+    /** Re-read the board on one machine for everyone stood in front of it. */
+    void refreshBoard(Machine m) {
+        MachineType t = host.typeOf(m);
+        GachaSpec spec = t == null ? null : t.gacha();
+        if (spec == null) { boards.remove(m); return; }
+        List<PacketDisplay> parts = boards.get(m);
+        if (parts == null || parts.isEmpty()) { boards.remove(m); return; }
+        GachaSeries s = series(spec);
+        for (PacketDisplay d : parts) {
+            if (!(d.baseContent() instanceof dev.servereer.machineconstruct.core.TextContent tc)) continue;
+            cues.tracker().forEachViewer(d, v -> d.sendTextFor(v, tc.withText(fill(tc.template(), spec, s, s.record(v.getUniqueId()), v.getName()))));
+        }
+    }
+
+    /** The board's own placeholders. A fresh Record reads as "nobody has played yet", which is what a passer-by should see. */
+    private String fill(String template, GachaSpec spec, GachaSeries s, GachaSeries.Record rec, String who) {
+        int own = 0;
+        for (GachaSeries.Entry e : s.loot()) if (rec.owned.contains(e.id)) own++;
+        ClawSpec c = spec.claw();
+        String grabs = c == null || c.pityGrabs() <= 0 ? "-" : String.valueOf(Math.max(1, c.pityGrabs() - rec.sinceGrab));
+        return template
+                .replace("{pity}", spec.pity().isEmpty() ? "<dark_gray>no guarantees here" : pityLine(spec, rec))
+                .replace("{grabs}", grabs)
+                .replace("{player}", who)
+                .replace("{pulls}", String.valueOf(rec.pulls))
+                .replace("{owned}", String.valueOf(own))
+                .replace("{total}", String.valueOf(s.loot().size()));
     }
 
     /** Auto-open parked capsules after {@code open_after} seconds. */
