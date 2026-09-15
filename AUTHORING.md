@@ -297,17 +297,19 @@ line and chasing lamps); because a theme is just a var override this needs no en
 theme whose solid parts are head textures still wants a real translucent block for `glass`.
 
 **`style: claw`** is a machine the player DRIVES (ADR 0047), and the only one allowed to pay nothing —
-its prizes are expensive. A coin hands over the controls; the player stands on the machine's control
-pad and WALKS (where they stand on the plate is where the claw sits over the pile, one to one), then
-clicks anywhere to drop it. The claw holds about one play in five: `grab_chance` when it closes
+its prizes are expensive. Press START: it takes a coin, then the machine SEATS the player at the
+joystick — it stands them at `claw.seat` facing the cabinet and takes their walk speed away, so WASD
+is pure stick input (Paper's `PlayerInputEvent`, the same contract ArcadeCab uses) and Space or a
+click drops the claw. The joystick part leans with the input. The claw holds about one play in five: `grab_chance` when it closes
 within `radius` of a prize, `miss_chance` when it closes over nothing, and `pity_grabs` failures in a
 row forces a hold. A grab then rolls the reward the usual way (rarity + pity + weighted entry), so
 the crane decides *whether*, never *what*.
 
 ```yaml
 claw:
-  control: pad            # walk the plate
-  pad: 1.4                # plate size, and pad_offset blocks in front of the machine
+  control: stick          # seat the player and read WASD (pad = the older walk-a-plate mode)
+  speed: 0.55             # blocks a second while a direction is held
+  seat: [0, 0, -1.17]     # where it stands the player, in model space
   travel: [0.62, 0.34]    # how far the claw may run from centre, x and z
   top: 2.08               # the gantry; floor: how deep it dives; cable: parked length
   chute: [-0.66, -0.20]   # where it lets go; tray: [x, y, z] where a won prize lands
@@ -323,7 +325,8 @@ item, so what slips out is the thing the player nearly won, the closing angle is
 pile settles where the claw has been rummaging. Parts the engine drives by name: `rail*`, `carriage`,
 `cable` (its Y scale is the cable), `claw_head`, `prong_*` (they hinge at the head), `held` (the
 carried prize — list it in `gacha.hidden`), `pile_*` (the prizes, and what `radius` is measured
-against). Geometry under `claw:` must match the model, which is why the machine is generated:
+against), and `stick` + `stick_ball` (the joystick, hinged at the shaft's foot). Give the cabinet a
+START button (`action: gacha:pull`) and a DROP button (`action: claw:drop`). Geometry under `claw:` must match the model, which is why the machine is generated:
 `templates/abyssal-market/tools/gen_claw.py`.
 
 ## Cheat-sheet

@@ -14,7 +14,9 @@ import java.util.Map;
  * generator writes both, so edit them together.
  * <pre>
  * claw:
- *   control: pad            # pad = walk the control plate with WASD; the claw follows where you stand
+ *   control: stick          # stick = the machine seats you at the joystick and reads WASD (ArcadeCab's contract)
+ *   speed: 0.55             # how fast the claw travels while a direction is held
+ *   seat: [0, 0, -1.1]      # where it stands you, in model space
  *   pad: 1.4                # the plate's size, and how far in front of the machine it sits
  *   pad_offset: 1.30
  *   drop_on_click: true     # any right-click drops, not only the claw button
@@ -34,10 +36,12 @@ import java.util.Map;
  */
 public final class ClawSpec {
 
-    public enum Control { PAD, SWEEP }
+    public enum Control { STICK, PAD }
 
     private final Control control;
-    private final double pad, padOffset;
+    private final double pad, padOffset;   // pad: only for control: pad
+    private final double speed;            // stick: how fast the claw travels, blocks/second
+    private final double[] seat;           // where the player is stood while playing (model space)
     private final boolean dropOnClick;
     private final double travelX, travelZ, top, floor, cable;
     private final double chuteX, chuteZ;
@@ -47,10 +51,10 @@ public final class ClawSpec {
     private final Map<String, Double> failModes;
     private final int timeoutTicks;
 
-    private ClawSpec(Control control, double pad, double padOffset, boolean dropOnClick, double travelX, double travelZ,
+    private ClawSpec(Control control, double pad, double padOffset, double speed, double[] seat, boolean dropOnClick, double travelX, double travelZ,
                      double top, double floor, double cable, double chuteX, double chuteZ, double trayX, double trayY, double trayZ,
                      double grabChance, double missChance, double radius, int pityGrabs, Map<String, Double> failModes, int timeoutTicks) {
-        this.control = control; this.pad = pad; this.padOffset = padOffset; this.dropOnClick = dropOnClick;
+        this.control = control; this.pad = pad; this.padOffset = padOffset; this.speed = speed; this.seat = seat; this.dropOnClick = dropOnClick;
         this.travelX = travelX; this.travelZ = travelZ; this.top = top; this.floor = floor; this.cable = cable;
         this.chuteX = chuteX; this.chuteZ = chuteZ; this.trayX = trayX; this.trayY = trayY; this.trayZ = trayZ;
         this.grabChance = grabChance; this.missChance = missChance; this.radius = radius; this.pityGrabs = pityGrabs;
@@ -67,9 +71,11 @@ public final class ClawSpec {
         if (fm != null) for (String k : fm.getKeys(false)) modes.put(k.toLowerCase(), fm.getDouble(k, 0));
         if (modes.isEmpty()) { modes.put("miss", 40.0); modes.put("slip_early", 35.0); modes.put("slip_late", 25.0); }
         long ms = dev.servereer.machineconstruct.grinder.GrinderSpec.parseTimeMillis(sec.getString("timeout", "25s"));
+        double[] seat = triple(sec, "seat", 0, 0, -1.1);
         return new ClawSpec(
-                "sweep".equalsIgnoreCase(sec.getString("control", "pad")) ? Control.SWEEP : Control.PAD,
-                sec.getDouble("pad", 1.4), sec.getDouble("pad_offset", 1.3), sec.getBoolean("drop_on_click", true),
+                "pad".equalsIgnoreCase(sec.getString("control", "stick")) ? Control.PAD : Control.STICK,
+                sec.getDouble("pad", 1.4), sec.getDouble("pad_offset", 1.3),
+                sec.getDouble("speed", 0.55), seat, sec.getBoolean("drop_on_click", true),
                 travel[0], travel[1], sec.getDouble("top", 2.05), sec.getDouble("floor", 1.24), sec.getDouble("cable", 0.22),
                 chute[0], chute[1], tray[0], tray[1], tray[2],
                 sec.getDouble("grab_chance", 0.20), sec.getDouble("miss_chance", 0.08), sec.getDouble("radius", 0.22),
@@ -88,6 +94,10 @@ public final class ClawSpec {
     public Control control() { return control; }
     public double pad() { return pad; }
     public double padOffset() { return padOffset; }
+    /** Claw travel speed in blocks a second while a direction is held (stick control). */
+    public double speed() { return speed; }
+    /** Where the machine stands the player while they play, in model space. */
+    public double[] seat() { return seat; }
     public boolean dropOnClick() { return dropOnClick; }
     public double travelX() { return travelX; }
     public double travelZ() { return travelZ; }

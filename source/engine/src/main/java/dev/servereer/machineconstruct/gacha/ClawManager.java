@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 
@@ -53,7 +54,9 @@ public final class ClawManager implements Listener {
         double phaseStart;                    // seconds (server clock) the phase began
         double x, z;                          // where the claw is, in model space relative to centre
         double open;                          // prongs: 0 shut, 1 wide
-        double wantX, wantZ;                  // where the pad says it should be
+        double wantX, wantZ;                  // where the controls say it should be
+        double stickX, stickZ;                // the joystick's lean, -1..1 on each axis
+        Location seatLoc; Float walkWas;      // the player is held at the cabinet while they play
         double deadline;
         boolean grabbed; String failMode = "miss";
         GachaManager.Result prize;            // rolled when the prongs close, only if grabbed
@@ -99,8 +102,9 @@ public final class ClawManager implements Listener {
         for (PacketDisplay d : driven(m)) { ss.rest.put(d, d.transform()); d.lock(true); }
         sessions.put(m, ss);
         show(ss, "held", false);
+        if (ss.claw.control() == ClawSpec.Control.STICK) seat(ss, p);
         p.sendMessage(GachaManager.msg(sk, "claw_start",
-                "<aqua>Walk the pad to move the claw <dark_gray>·<aqua> click to drop it. <gray>Grab odds ~{pct}%.",
+                "<aqua>WASD moves the claw <dark_gray>·<aqua> Space or click drops it. <gray>It holds about {pct} times in 100.",
                 MenuSkin.vars("pct", String.valueOf(Math.round(ss.claw.grabChance() * 100)))));
         sound(ss, "block.copper_bulb.turn_on", 0.7f, 1.3f);
         return true;
@@ -115,7 +119,50 @@ public final class ClawManager implements Listener {
         return true;
     }
 
-    /** Where the player stands on the pad is where the claw goes. */
+    /**
+     * Hold the player at the cabinet while they play — the same contract ArcadeCab uses: stand them on
+     * the machine's seat looking at it and take their walk speed away, so WASD becomes pure input and
+     * they cannot wander off mid-play. Restored in {@link #unseat}.
+     */
+    private void seat(Session ss, Player p) {
+        Location a = ss.m.anchor();
+        float[] w = ss.root.apply((float) (0.5 + ss.claw.seat()[0]), (float) ss.claw.seat()[1], (float) (0.5 + ss.claw.seat()[2]));
+        Location loc = a.clone().add(w[0], w[1], w[2]);
+        loc.setYaw((float) Math.toDegrees(Math.atan2(-(a.getX() + 0.5 - loc.getX()), a.getZ() + 0.5 - loc.getZ())));
+        loc.setPitch(12f);
+        ss.seatLoc = loc; ss.walkWas = p.getWalkSpeed();
+        p.teleport(loc);
+        p.setWalkSpeed(0f);
+    }
+
+    private void unseat(Session ss) {
+        Player p = plugin.getServer().getPlayer(ss.player);
+        if (p == null || ss.walkWas == null) return;
+        p.setWalkSpeed(ss.walkWas);
+        ss.walkWas = null;
+    }
+
+    /** Real WASD, straight off the client (Paper's input packet) — the joystick leans with it. */
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    public void onInput(PlayerInputEvent e) {
+        if (sessions.isEmpty()) return;
+        for (Map.Entry<Machine, Session> en : sessions.entrySet()) {
+            Session ss = en.getValue();
+            if (!ss.player.equals(e.getPlayer().getUniqueId())) continue;
+            if (ss.claw.control() != ClawSpec.Control.STICK) return;
+            org.bukkit.util.Vector in = new org.bukkit.util.Vector(
+                    (e.getInput().isRight() ? 1 : 0) - (e.getInput().isLeft() ? 1 : 0), 0,
+                    (e.getInput().isBackward() ? 1 : 0) - (e.getInput().isForward() ? 1 : 0));
+            if (ss.phase == Phase.DRIVE) {
+                // the player faces the machine, so their "forward" is the machine's +z (into the box)
+                ss.stickX = -in.getX(); ss.stickZ = in.getZ();
+                if (e.getInput().isJump()) drop(e.getPlayer(), en.getKey());
+            } else { ss.stickX = 0; ss.stickZ = 0; }
+            return;
+        }
+    }
+
+    /** Where the player stands on the pad is where the claw goes (control: pad). */
     public void onPlayerMoved(Player p, Location to) {
         for (Session ss : sessions.values()) {
             if (!ss.player.equals(p.getUniqueId())) continue;
@@ -135,7 +182,7 @@ public final class ClawManager implements Listener {
 
     public void forget(Machine m) {
         Session ss = sessions.remove(m);
-        if (ss != null) release(ss, false);
+        if (ss != null) { unseat(ss); release(ss, false); }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -162,7 +209,12 @@ public final class ClawManager implements Listener {
     }
 
     @EventHandler
-    public void onQuit(PlayerQuitEvent e) { finishFor(e.getPlayer().getUniqueId()); }
+    public void onQuit(PlayerQuitEvent e) {
+        for (Session ss : sessions.values()) if (ss.player.equals(e.getPlayer().getUniqueId()) && ss.walkWas != null) {
+            e.getPlayer().setWalkSpeed(ss.walkWas); ss.walkWas = null;   // never leave someone frozen
+        }
+        finishFor(e.getPlayer().getUniqueId());
+    }
 
     @EventHandler
     public void onDeath(PlayerDeathEvent e) { finishFor(e.getEntity().getUniqueId()); }
@@ -195,6 +247,14 @@ public final class ClawManager implements Listener {
         ClawSpec c = ss.claw;
         switch (ss.phase) {
             case DRIVE -> {
+                if (c.control() == ClawSpec.Control.STICK) {   // hold a direction and the claw travels
+                    double step = c.speed() * TICK / 20.0;
+                    ss.wantX = clamp(ss.wantX + ss.stickX * step, -c.travelX(), c.travelX());
+                    ss.wantZ = clamp(ss.wantZ + ss.stickZ * step, -c.travelZ(), c.travelZ());
+                    stick(ss);
+                    Player at = plugin.getServer().getPlayer(ss.player);
+                    if (at != null && ss.seatLoc != null && at.getLocation().distanceSquared(ss.seatLoc) > 1.5) at.teleport(ss.seatLoc);
+                }
                 ss.x += (ss.wantX - ss.x) * 0.35;   // the gantry catches up rather than snapping
                 ss.z += (ss.wantZ - ss.z) * 0.35;
                 drawGantry(ss, c.cable());
@@ -247,7 +307,7 @@ public final class ClawManager implements Listener {
                 ss.x += (0 - ss.x) * 0.25; ss.z += (0 - ss.z) * 0.25;
                 ss.open = 1 - u;
                 drawGantry(ss, c.cable());
-                if (u >= 1) { sessions.remove(ss.m); release(ss, true); }
+                if (u >= 1) { sessions.remove(ss.m); unseat(ss); release(ss, true); }
             }
         }
     }
@@ -326,7 +386,7 @@ public final class ClawManager implements Listener {
 
     private List<PacketDisplay> driven(Machine m) {
         List<PacketDisplay> out = new ArrayList<>();
-        out.addAll(CuePlayer.select(m, "rail*|carriage|cable|claw_head|held"));
+        out.addAll(CuePlayer.select(m, "rail*|carriage|cable|claw_head|held|stick|stick_ball"));
         out.addAll(CuePlayer.select(m, "prong_*"));
         return out;
     }
@@ -382,6 +442,33 @@ public final class ClawManager implements Listener {
             double sign = i == 2 ? -1 : 1;          // the two side prongs splay opposite ways
             push(d, base.rotatedAbout(axis[0], axis[1], axis[2], deg * sign, pivot[0], pivot[1], pivot[2]));
             i++;
+        }
+    }
+
+    /**
+     * The joystick leans the way the player is pushing — shaft and ball together, hinged at the FOOT of
+     * the shaft, so the ball swings in an arc instead of spinning on the spot.
+     */
+    private void stick(Session ss) {
+        List<PacketDisplay> parts = CuePlayer.select(ss.m, "stick|stick_ball");
+        if (parts.isEmpty()) return;
+        float[] pivot = null;
+        for (PacketDisplay d : parts) {
+            if (!"stick".equals(d.partName())) continue;
+            MTransform rest = ss.rest.get(d);
+            if (rest == null) continue;
+            float[] mid = ss.root.rotateVec(rest.sx / 2, 0, rest.sz / 2);   // the shaft's bottom centre
+            pivot = new float[]{ rest.tx + mid[0], rest.ty, rest.tz + mid[2] };
+        }
+        if (pivot == null) return;
+        float[] ax = ss.root.rotateVec(1, 0, 0), az = ss.root.rotateVec(0, 0, 1);
+        for (PacketDisplay d : parts) {
+            MTransform rest = ss.rest.get(d);
+            if (rest == null) continue;
+            MTransform t = rest;
+            if (Math.abs(ss.stickZ) > 0.01) t = t.rotatedAbout(ax[0], ax[1], ax[2], 20 * ss.stickZ, pivot[0], pivot[1], pivot[2]);
+            if (Math.abs(ss.stickX) > 0.01) t = t.rotatedAbout(az[0], az[1], az[2], -20 * ss.stickX, pivot[0], pivot[1], pivot[2]);
+            push(d, t);
         }
     }
 
