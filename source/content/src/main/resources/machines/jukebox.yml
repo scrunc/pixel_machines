@@ -1,0 +1,143 @@
+# Jukebox — a placed speaker that plays SAVED library tracks (and playlists)
+# locationally through Simple Voice Chat, and crafts custom discs bound to a
+# track (ADR 0024).
+#
+# Right-click to open its menu (Browse tracks/playlists · Play/Pause/Stop/Skip ·
+# Loop · Volume · Craft Disc · Eject · New Playlist). Right-click while HOLDING a
+# custom disc to insert it and start playing. The GUI is rendered in code
+# (JukeboxMenus), so there is no `gui:` section here.
+#
+# Anchor is a BARRIER (invisible, blast/piston-proof, no block-entity) exactly
+# like the Chunk Collector — the whole visual is the packet-display model below,
+# and state persists to plugins/MachineConstruct/external_machines.yml. Break it
+# with SNEAK + LEFT-CLICK (a grief probe still lets protection plugins veto).
+#
+# Authoring: footprint is centred on the anchor (x=z=0.5); blocks are
+# corner-anchored (a part fills [offset, offset+scale]); `octagon: true` adds the
+# 45°-rotated twin for round discs; `tiers.vars` re-render the model per tier.
+id: jukebox
+anchor: barrier
+
+placer:
+  item: jukebox
+  name: "<dark_aqua>✦ <gradient:#f9d423:#ff4e50><bold>Jukebox</bold></gradient> <dark_aqua>✦"
+  lore:
+    - "<gray>Right-click a block face to build (invisible anchor)."
+    - "<gray>Plays saved tracks and playlists out loud (Simple Voice Chat)."
+    - "<gray>Insert a custom disc, or Browse the library."
+    - "<dark_gray>Sneak + left-click to pick it back up (keeps its disc)."
+
+# ── palette (Tier I defaults; overridden per tier under tiers.vars) ──
+vars:
+  dark:    polished_blackstone     # base slab
+  wood:    dark_oak_planks         # cabinet body
+  panel:   deepslate_tiles         # front panel
+  trim:    waxed_cut_copper        # rims / caps
+  speaker: amethyst_block          # woofer cones
+  grille:  copper_grate            # speaker grilles
+  glow:    sea_lantern             # accent lights
+  disc:    music_disc_11           # the record on the turntable (item display)
+
+model:
+  parts:
+
+    # ── base disc ──
+    base:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        slab: { block: "${dark}", offset: [-0.55, 0.00, -0.55], scale: [1.10, 0.14, 1.10], octagon: true }
+        rim:  { block: "${trim}", offset: [-0.60, 0.14, -0.60], scale: [1.20, 0.05, 1.20], octagon: true }
+        foot_ne: { block: "${trim}", offset: [ 0.40, 0.00,  0.40], scale: [0.12, 0.06, 0.12] }
+        foot_nw: { block: "${trim}", offset: [-0.52, 0.00,  0.40], scale: [0.12, 0.06, 0.12] }
+        foot_se: { block: "${trim}", offset: [ 0.40, 0.00, -0.52], scale: [0.12, 0.06, 0.12] }
+        foot_sw: { block: "${trim}", offset: [-0.52, 0.00, -0.52], scale: [0.12, 0.06, 0.12] }
+
+    # ── cabinet (the body; front faces -Z) ──
+    cabinet:
+      offset: [0.5, 0.19, 0.5]
+      parts:
+        body:  { block: "${wood}",  offset: [-0.34, 0.00, -0.30], scale: [0.68, 0.62, 0.60] }
+        panel: { block: "${panel}", offset: [-0.30, 0.06, -0.33], scale: [0.60, 0.50, 0.05] }
+        cap:   { block: "${trim}",  offset: [-0.40, 0.62, -0.36], scale: [0.80, 0.06, 0.72] }
+        light_l: { block: "${glow}", offset: [-0.31, 0.54, -0.34], scale: [0.06, 0.06, 0.04] }
+        light_r: { block: "${glow}", offset: [ 0.25, 0.54, -0.34], scale: [0.06, 0.06, 0.04] }
+
+    # ── left woofer (shakes + pumps notes while playing) ──
+    speaker_left:
+      offset: [0.34, 0.34, 0.17]
+      parts:
+        ring: { block: "${grille}", offset: [-0.12, -0.15, -0.03], scale: [0.24, 0.30, 0.05] }
+        cone:
+          block: "${speaker}"
+          offset: [-0.08, -0.11, -0.06]
+          scale:  [0.16, 0.22, 0.05]
+          animation:
+            working:
+              shake:    { amplitude: 0.02, hz: 9 }
+              particle: { type: note, offset: [0.0, 0.05, -0.15], spread: [0.08, 0.10, 0.04], count: 1, speed: 0.02, rate: 0.35 }
+
+    # ── right woofer ──
+    speaker_right:
+      offset: [0.66, 0.34, 0.17]
+      parts:
+        ring: { block: "${grille}", offset: [-0.12, -0.15, -0.03], scale: [0.24, 0.30, 0.05] }
+        cone:
+          block: "${speaker}"
+          offset: [-0.08, -0.11, -0.06]
+          scale:  [0.16, 0.22, 0.05]
+          animation:
+            working:
+              shake:    { amplitude: 0.02, hz: 9 }
+              particle: { type: note, offset: [0.0, 0.05, -0.15], spread: [0.08, 0.10, 0.04], count: 1, speed: 0.02, rate: 0.35 }
+
+    # ── turntable on top (idles slow, spins fast while playing) ──
+    turntable:
+      offset: [0.5, 0.83, 0.5]
+      animation:
+        idle:    { spin: { axis: y, speed: 18 } }
+        working: { spin: { axis: y, speed: 150 } }
+      parts:
+        platter: { block: "${dark}", offset: [-0.22, 0.00, -0.22], scale: [0.44, 0.05, 0.44], octagon: true }
+        record:  { item: "${disc}", offset: [0.0, 0.07, 0.0], scale: [0.34, 0.34, 0.34], display: fixed, center: true }
+        spindle: { block: "${trim}", offset: [-0.03, 0.05, -0.03], scale: [0.06, 0.10, 0.06] }
+
+    # ── slow-orbiting accent lights (always) ──
+    halo:
+      offset: [0.5, 0.86, 0.5]
+      animation: { always: { spin: { axis: y, speed: 30 } } }
+      parts:
+        n: { block: "${glow}", offset: [-0.04, -0.04,  0.30], scale: [0.08, 0.08, 0.08] }
+        s: { block: "${glow}", offset: [-0.04, -0.04, -0.38], scale: [0.08, 0.08, 0.08] }
+        e: { block: "${glow}", offset: [ 0.30, -0.04, -0.04], scale: [0.08, 0.08, 0.08] }
+        w: { block: "${glow}", offset: [-0.38, -0.04, -0.04], scale: [0.08, 0.08, 0.08] }
+
+tiers:
+  max: 3
+  upgrade: { item: AMETHYST_CLUSTER, amount: 4, name: "<light_purple>Resonance Core" }
+  speed: [1.0, 1.0, 1.0]
+  batch: [1, 1, 1]
+  capacity: [1.0, 1.0, 1.0]
+  # Per-tier visual swaps — the model re-renders with these vars merged over the base.
+  vars:
+    2:
+      wood:    warped_planks
+      trim:    gold_block
+      speaker: amethyst_cluster
+      glow:    ochre_froglight
+    3:
+      dark:    polished_deepslate
+      wood:    crimson_planks
+      trim:    netherite_block
+      speaker: sea_lantern
+      glow:    pearlescent_froglight
+
+# ── behaviour: locational playback + disc crafting (parsed by JukeboxSpec) ──
+jukebox:
+  distance: [48, 96, 128]      # per tier: SVC reach in blocks (index 0 = Tier I; Tier III = 128 max)
+                               # NOTE: Simple Voice Chat clamps this to its server max_voice_distance.
+  loop: false                  # default loop state for a freshly-placed jukebox
+  max_per_player: 0            # how many a player may place (0 = unlimited)
+  craft:
+    cost:                      # consumed to mint one disc bound to the loaded track
+      - "DIAMOND 1"
+      - "AMETHYST_SHARD 2"

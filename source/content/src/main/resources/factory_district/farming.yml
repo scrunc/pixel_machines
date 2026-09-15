@@ -1,0 +1,481 @@
+# Virtual Factory District — FARMING branch (ADR 0017).
+# Merged at load with builtin.yml + any admin-scanned files. Same machine, same Quantum Vault,
+# same worker pool as the mining branch — you can mine ore AND grow crops in one district.
+#
+# THE LOOP (parallels the Virtual Mine, but with farming-only mechanics):
+#   Virtual Farm  → prospects/clears PLOTS (worker-scaled, like the mine finds deposits)
+#   Plot          → roll a soil-fertility (richness); OPEN it into a FIELD of your chosen crop
+#   Field         → produces crops; consumes SOIL nutrients over time (reversible — see below)
+#   Crops         → feed LIVESTOCK (coop/pasture/pen) and PROCESSING (mill/bakery) via the vault
+#
+# UNIQUE FARMING MECHANICS (engine, ADR 0017):
+#   • soil: { start, per-cycle, depleted-mult }   — a field drains nutrients each cycle; at 0 its
+#       yield craters to depleted-mult UNTIL restored. Two ways back:
+#         (a) fertilizer: { item, amount, restores }  — auto-pulled from the vault when soil runs out
+#             (chain a Composter/bone_meal source into the same vault and it self-heals offline).
+#         (b) crop rotation: convert a spent field → a legume (restores-soil: N regenerates the soil),
+#             let it run, then convert back — the regenerated nutrients CARRY OVER.
+#   • restores-soil: N   — marks a legume/fallow field that regenerates soil instead of consuming it.
+#   • boosts-output: ×M  — an Apiary lifts the WHOLE district's yield by M while it's staffed (stacks).
+#
+# OUTPUT / build-cost / upgrades / requires / workers / hazard syntax: identical to builtin.yml.
+
+categories:
+  farmstead:  { name: "Farmstead",  icon: HAY_BLOCK }     # the Virtual Farm (build these)
+  plots:      { name: "Plots",      icon: FARMLAND }      # produced by the Virtual Farm → open into a field
+  fields:     { name: "Fields",     icon: WHEAT }         # opened from a plot; never built directly
+  livestock:  { name: "Livestock",  icon: COW_SPAWN_EGG } # fed by crops → animal products
+  apiary:     { name: "Beekeeping",  icon: BEE_NEST }     # hives (output boost + honey), bee breeding, honey processing
+
+factories:
+
+  # ── VIRTUAL FARM ── the root. Prospects plots (worker-scaled) + a small passive trickle.
+  virtual_farm:
+    name: "Virtual Farm"
+    icon: HAY_BLOCK
+    category: farmstead
+    build:
+      blocks: [ dirt 256, oak_log 64, water_bucket 4, composter 4, wheat_seeds 64, oak_fence 32 ]
+      creatures: [ villager 1 ]
+    cycle-seconds: 120
+    workers: 2                        # needs 2 assigned farmhands to run
+    output:
+      - wheat_seeds 4
+      - { item: hay_block, amount: 1, chance: 0.3 }
+    generates:
+      every-seconds: 600
+      chance: 0.4
+      worker-scaled: true             # more farmhands → more plots cleared (prospecting)
+      count: 1
+      max: 6                          # up to 6 plots from one Virtual Farm
+      outcomes:
+        - { farm: tilled_plot,  weight: 5 }   # common cropland
+        - { farm: wetland_plot, weight: 2 }   # uncommon — paddy/cane crops
+        - { farm: rich_plot,    weight: 1 }   # rare — high-value crops
+
+  # ════════════════ BEEKEEPING (ADR 0017 follow-up) ════════════════
+  # Three lines: a HIVE ladder (district output boost + honey), BEE BREEDING (grow your own bees),
+  # and HONEY PROCESSING (honeycomb → honey/sugar/wax). Boosts apply only while the hive is STAFFED
+  # and stack across hives — kept modest per unit on purpose. Honey processing chains into the Bakery.
+
+  # ── HIVE LADDER ── build a Bee Box, convert it up. Each form lifts district output more + more honey.
+  bee_box:
+    name: "Bee Box"
+    icon: BEEHIVE
+    category: apiary
+    build:
+      blocks: [ oak_planks 32, honeycomb 8, oak_fence 8, dandelion 8, poppy 8 ]
+      creatures: [ bee 2 ]            # captured bees become the colony (breed more — see Queen's Hive)
+    workers: 1                        # a beekeeper — boost applies only while staffed
+    boosts-output: 1.08
+    cycle-seconds: 180
+    output:
+      - { item: honeycomb,    amount: 1, chance: 0.4 }
+      - { item: honey_bottle, amount: 1, chance: 0.3 }
+    demolish-refund: [ oak_planks 16, honeycomb 4 ]
+    upgrades:
+      - { to: apiary, name: "Build a full Apiary", cost: [ oak_planks 64, honeycomb_block 4, oak_fence 16 ] }
+
+  # 'apiary' id kept (legacy) — now the second hive rung.
+  apiary:
+    name: "Apiary"
+    icon: BEE_NEST
+    category: apiary
+    buildable: false
+    workers: 1
+    boosts-output: 1.15
+    cycle-seconds: 180
+    output:
+      - { item: honeycomb,    amount: "1-2", chance: 0.5 }
+      - { item: honey_bottle, amount: 1, chance: 0.4 }
+    demolish-refund: [ oak_planks 32, honeycomb_block 2 ]
+    upgrades:
+      - { to: bee_yard, name: "Expand into a Bee Yard", cost: [ oak_planks 128, honeycomb_block 8, flowering_azalea 4 ] }
+
+  bee_yard:
+    name: "Bee Yard"
+    icon: HONEYCOMB_BLOCK
+    category: apiary
+    buildable: false
+    workers: 2
+    boosts-output: 1.22
+    cycle-seconds: 180
+    output:
+      - { item: honeycomb,    amount: "2-3", chance: 0.6 }
+      - { item: honey_bottle, amount: "1-2", chance: 0.5 }
+    demolish-refund: [ honeycomb_block 6 ]
+    upgrades:
+      - { to: pollination_dome, name: "Build a Pollination Dome", cost: [ honeycomb_block 16, glass 32, flowering_azalea 8, emerald 8 ] }
+
+  pollination_dome:
+    name: "Pollination Dome"
+    icon: HONEY_BLOCK
+    category: apiary
+    buildable: false
+    workers: 2
+    boosts-output: 1.30               # the strongest hive — pricey + slot-hungry, so few of them
+    cycle-seconds: 180
+    output:
+      - { item: honeycomb,    amount: "2-4", chance: 0.7 }
+      - { item: honey_bottle, amount: "2-3", chance: 0.6 }
+      - { item: honey_block,  amount: 1, chance: 0.2 }
+    demolish-refund: [ honeycomb_block 12, glass 16 ]
+
+  # ── BEE BREEDING ── grow your own bees into the roster (so you can build hives without catching wild). ──
+  queens_hive:
+    name: "Queen's Hive"
+    icon: BEE_SPAWN_EGG
+    category: apiary
+    build:
+      blocks: [ oak_planks 64, honeycomb_block 8, flowering_azalea 4, oak_fence 16 ]
+      creatures: [ bee 2 ]            # seed colony
+    workers: 1                        # a breeder — only breeds while staffed
+    breeds: { type: bee, every-seconds: 600, chance: 0.7, count: 1, worker-scaled: true }
+    cycle-seconds: 240
+    output:
+      - { item: honeycomb, amount: 1, chance: 0.3 }
+    demolish-refund: [ oak_planks 32, honeycomb_block 4 ]
+    upgrades:
+      - { to: royal_hive, name: "Crown a Royal Hive", cost: [ honeycomb_block 16, gold_ingot 8, flowering_azalea 8 ] }
+
+  royal_hive:
+    name: "Royal Hive"
+    icon: HONEY_BLOCK
+    category: apiary
+    buildable: false
+    workers: 2
+    breeds: { type: bee, every-seconds: 360, chance: 0.85, count: 2, worker-scaled: true }
+    cycle-seconds: 240
+    output:
+      - { item: honeycomb,    amount: "1-2", chance: 0.4 }
+      - { item: honey_bottle, amount: 1, chance: 0.3 }
+    demolish-refund: [ honeycomb_block 8, gold_ingot 4 ]
+
+  # ── HONEY PROCESSING ── refine honeycomb (pulled from the vault) → honey/sugar/wax. Sugar feeds the Bakery. ──
+  honey_extractor:
+    name: "Honey Extractor"
+    icon: HONEY_BOTTLE
+    category: apiary
+    build:
+      blocks: [ smooth_stone 64, glass 16, oak_planks 32, hopper 4 ]
+    workers: 1
+    cycle-seconds: 60
+    inputs: [ honeycomb 4 ]
+    output:
+      - honey_bottle 2
+      - { item: sugar, amount: "1-2", chance: 0.6 }   # → feeds the Bakery
+    upgrades:
+      - { to: honey_refinery, name: "Upgrade to a Honey Refinery", cost: [ smooth_stone 128, copper_block 8, glass 32 ] }
+
+  honey_refinery:
+    name: "Honey Refinery"
+    icon: HONEY_BLOCK
+    category: apiary
+    buildable: false
+    workers: 2
+    cycle-seconds: 60
+    inputs: [ honeycomb 4 ]
+    output:
+      - honey_bottle 3
+      - { item: sugar,       amount: "2-3", chance: 0.7 }
+      - { item: glass_bottle, amount: 1, chance: 0.2 }
+    demolish-refund: [ smooth_stone 64, copper_block 4 ]
+
+  wax_workshop:
+    name: "Wax Workshop"
+    icon: HONEYCOMB
+    category: apiary
+    build:
+      blocks: [ oak_planks 64, smooth_stone 32, hopper 2 ]
+    workers: 1
+    cycle-seconds: 90
+    inputs: [ honeycomb 6 ]
+    output:
+      - honeycomb_block 1
+      - { item: candle, amount: "1-2", chance: 0.5 }
+
+  # ── PLOTS (buildable:false) — produced by the Virtual Farm. Each rolls a soil fertility (richness)
+  #    that carries into whatever crop you open it into. Open via the upgrade list. ──
+  tilled_plot:
+    name: "Tilled Plot"
+    icon: FARMLAND
+    category: plots
+    buildable: false
+    tier: "Plot"
+    cycle-seconds: 240
+    richness: { min: 0.6, max: 1.8 }
+    output: [ wheat 1 ]               # a trickle while un-planted
+    upgrades:
+      - { to: wheat_field,  name: "Plant Wheat",   cost: [ wheat_seeds 16, oak_fence 8 ] }
+      - { to: carrot_field, name: "Plant Carrots", cost: [ carrot 16, oak_fence 8 ] }
+      - { to: potato_field, name: "Plant Potatoes", cost: [ potato 16, oak_fence 8 ] }
+
+  rich_plot:
+    name: "Fertile Plot"
+    icon: MOSS_BLOCK
+    category: plots
+    buildable: false
+    tier: "Rich Plot"
+    cycle-seconds: 240
+    richness: { min: 1.2, max: 2.6 }   # rich soil swings big
+    output: [ wheat 2 ]
+    upgrades:
+      - { to: pumpkin_field, name: "Plant Pumpkins",   cost: [ pumpkin_seeds 16, oak_fence 8 ] }
+      - { to: golden_field,  name: "Plant Golden Crops", cost: [ golden_carrot 8, gold_ingot 4 ] }
+
+  wetland_plot:
+    name: "Wetland Plot"
+    icon: MUD
+    category: plots
+    buildable: false
+    tier: "Wetland"
+    cycle-seconds: 240
+    richness: { min: 0.8, max: 2.0 }
+    output: [ sugar_cane 1 ]
+    upgrades:
+      - { to: rice_paddy,     name: "Flood for Rice", cost: [ wheat_seeds 16, clay 16 ] }
+      - { to: sugarcane_field, name: "Plant Sugarcane", cost: [ sugar_cane 16, sand 16 ] }
+
+  # ── FIELDS (buildable:false) — opened from a plot, inherit its fertility, start with full soil.
+  #    Soil drains as they produce; auto-fertilise with bone_meal from the vault, or rotate to clover. ──
+  wheat_field:
+    name: "Wheat Field"
+    icon: WHEAT
+    category: fields
+    tier: "I"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }   # green thumb
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output:
+      - wheat 6
+      - { item: wheat_seeds, amount: "1-3", chance: 0.6 }
+    demolish-refund: [ wheat 16 ]
+    upgrades:
+      - { to: irrigated_wheat, name: "Irrigate the field",
+          cost: [ iron_ingot 6, water_bucket 4, clay 32 ],
+          requires-produced: { wheat: 2000 } }
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  irrigated_wheat:
+    name: "Irrigated Wheat Field"
+    icon: HAY_BLOCK
+    category: fields
+    tier: "II"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 2
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 25, bonus-per-tier: 0.2, max-tier: 4 }
+    soil: { start: 900, per-cycle: 1, depleted-mult: 0.25 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 150 }
+    hazard: { chance: 0.02, repair-cost: [ oak_planks 16, wheat_seeds 16 ] }   # crop blight
+    output-rolls: 2
+    output:
+      - { item: wheat,     weight: 8, amount: "8-14" }
+      - { item: hay_block, weight: 2, amount: 1 }
+      - { item: bread,     weight: 1, amount: "1-2" }
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  carrot_field:
+    name: "Carrot Field"
+    icon: CARROT
+    category: fields
+    tier: "I"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output: [ carrot 6 ]
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  potato_field:
+    name: "Potato Field"
+    icon: POTATO
+    category: fields
+    tier: "I"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output:
+      - potato 6
+      - { item: poisonous_potato, amount: 1, chance: 0.05 }
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  pumpkin_field:
+    name: "Pumpkin Field"
+    icon: PUMPKIN
+    category: fields
+    tier: "Rare"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 120
+    soil: { start: 700, per-cycle: 1, depleted-mult: 0.25 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output:
+      - pumpkin 4
+      - { item: pumpkin_pie, amount: 1, chance: 0.2 }
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  golden_field:
+    name: "Golden Crop Field"
+    icon: GOLDEN_CARROT
+    category: fields
+    tier: "Rare"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 2
+    cycle-seconds: 180
+    soil: { start: 800, per-cycle: 2, depleted-mult: 0.3 }
+    fertilizer: { item: bone_meal, amount: 2, restores: 160 }
+    output:
+      - { item: golden_carrot, amount: "1-2", chance: 0.7 }
+      - { item: gold_nugget,   amount: "1-3", chance: 0.4 }
+      - { command: "eco give %player% %amount%", amount: "3-8", chance: 0.15 }   # cash bonus
+    deplete-cycles: 300                # rich but finite — exhausts; demolish for scrap
+    scrap: [ gold_ingot 4, golden_carrot 4 ]
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  rice_paddy:
+    name: "Rice Paddy"
+    icon: MOSS_CARPET
+    category: fields
+    tier: "I"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 90
+    soil: { start: 700, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output:
+      - wheat 5
+      - { item: wheat_seeds, amount: "1-2", chance: 0.5 }
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  sugarcane_field:
+    name: "Sugarcane Field"
+    icon: SUGAR_CANE
+    category: fields
+    tier: "I"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 90
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: bone_meal, amount: 1, restores: 120 }
+    output:
+      - sugar_cane 8
+      - { item: sugar, amount: "1-2", chance: 0.5 }
+    upgrades:
+      - { to: clover_field, name: "Rotate to clover (restore soil)", cost: [ wheat_seeds 8 ] }
+
+  # ── CLOVER ── the rotation/fallow field. Regenerates soil instead of consuming it; tiny output.
+  #    Convert a spent field → clover, let it run, then convert back — the soil carries over. ──
+  clover_field:
+    name: "Clover (Fallow)"
+    icon: FERN
+    category: fields
+    tier: "Fallow"
+    buildable: false
+    requires: [ virtual_farm ]
+    workers: 1
+    cycle-seconds: 60
+    soil: { start: 900, per-cycle: 0, depleted-mult: 1.0 }   # 'start' is the cap it regenerates toward
+    restores-soil: 6                  # +6 nutrients per cycle (rotation: cheaper than fertiliser, but slower)
+    output:
+      - { item: wheat_seeds, amount: 1, chance: 0.4 }
+      - { item: bone_meal,   amount: 1, chance: 0.2 }   # green manure
+    upgrades:
+      - { to: wheat_field,  name: "Re-plant Wheat (keep restored soil)",  cost: [ wheat_seeds 16 ] }
+      - { to: carrot_field, name: "Re-plant Carrots (keep restored soil)", cost: [ carrot 16 ] }
+      - { to: potato_field, name: "Re-plant Potatoes (keep restored soil)", cost: [ potato 16 ] }
+
+  # ── LIVESTOCK ── built directly; captured animals + crop feed (from the vault) → animal products. ──
+  chicken_coop:
+    name: "Chicken Coop"
+    icon: EGG
+    category: livestock
+    build:
+      blocks: [ oak_planks 64, hay_block 8, oak_fence 16, white_wool 8 ]
+      creatures: [ chicken 4 ]
+    workers: 1
+    cycle-seconds: 60
+    inputs: [ wheat_seeds 2 ]         # feed pulled from the vault each cycle
+    output:
+      - egg 4
+      - { item: feather, amount: "1-2", chance: 0.6 }
+      - { item: chicken, amount: 1, chance: 0.2 }
+
+  cow_pasture:
+    name: "Cow Pasture"
+    icon: MILK_BUCKET
+    category: livestock
+    build:
+      blocks: [ oak_fence 32, hay_block 16, grass_block 32, water_bucket 2 ]
+      creatures: [ cow 4 ]
+    workers: 1
+    cycle-seconds: 120
+    inputs: [ wheat 2 ]
+    output:
+      - milk_bucket 1
+      - { item: leather, amount: "1-2", chance: 0.5 }
+      - { item: beef,    amount: "1-2", chance: 0.4 }
+
+  sheep_pen:
+    name: "Sheep Pen"
+    icon: WHITE_WOOL
+    category: livestock
+    build:
+      blocks: [ oak_fence 32, hay_block 8, grass_block 16, shears 1 ]
+      creatures: [ sheep 4 ]
+    workers: 1
+    cycle-seconds: 90
+    inputs: [ wheat 1 ]
+    output:
+      - white_wool 3
+      - { item: mutton, amount: "1-2", chance: 0.4 }
+
+  # ── PROCESSING ── refine crops/animal products. The Bakery is the multi-input chaining showcase. ──
+  flour_mill:
+    name: "Windmill"
+    icon: BREAD
+    category: processing
+    build:
+      blocks: [ smooth_stone 128, oak_planks 64, white_wool 16, cobblestone 64 ]
+    workers: 1
+    cycle-seconds: 45
+    inputs: [ wheat 3 ]               # grind 3 wheat → bread
+    output: [ bread 2 ]
+
+  bakery:
+    name: "Bakery"
+    icon: CAKE
+    category: processing
+    build:
+      blocks: [ bricks 128, furnace 2, smooth_stone 64, oak_planks 32 ]
+    workers: 1
+    cycle-seconds: 120
+    inputs: [ wheat 3, egg 1, milk_bucket 1, sugar 2 ]   # pulls from fields + coop + pasture + cane
+    output:
+      - cake 1
+      - { item: pumpkin_pie, amount: 1, chance: 0.3 }
+
+  # ── HOUSING is shared with the mining branch (Worker's Lodge + Town Hall in builtin.yml).
+  #    Farmhands and miners are one labor pool — no separate farm housing here. ──

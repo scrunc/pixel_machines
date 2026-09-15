@@ -1,0 +1,259 @@
+# Dimensional Grinder — a SmartSpawner-replacing machine (ADR 0008).
+# One grinder per player; it holds tier-limited slots of virtual spawners, each
+# accruing loot + XP over wall-clock time into a shared pool you collect/sell
+# from a paginated menu. Runs free (no fuel). Loot + prices reuse SmartSpawner's
+# formats (see grinder/*.yml).
+#
+# Authoring uses the engine's variable layer (so nothing repeats):
+#   • vars:        — values referenced as ${name} (whole-value or inline).
+#   • tiers.vars:  — per-tier overrides; the SAME model re-renders per tier, so
+#                    upgrading just swaps the listed blocks (no model duplication).
+#   • octagon: true — auto-adds the 45°-rotated twin (an octagonal disc, once).
+# Blocks are corner-anchored: a part fills [offset, offset+scale]; centre with
+# offset = -scale/2. Each tier is a parent group on the column axis (x=z=0.5).
+id: dimensional_grinder
+anchor: chest
+
+# ── palette (Tier I defaults; overridden per tier under tiers.vars) ──
+vars:
+  metal:  cut_copper          # bands · rims · eyelids
+  trim:   gold_block          # plinth/basin trims · dish · banner
+  stud:   gold_block          # corner studs
+  stone:  red_nether_bricks   # plinth · basin bowl · altar
+  column: crimson_planks      # pedestal · neck
+  iris:   ochre_froglight     # the glowing eye
+  ember:  shroomlight         # flame core
+  liquid: warped_planks       # basin liquid surface
+  runes:  amethyst_block      # orbiting eye runes
+  tname:  "<dark_purple>✦ <gradient:#ff8a00:#ffd277><bold>Dimensional Grinder</bold></gradient> <dark_purple>✦"
+
+model:
+  parts:
+
+    # ── TIER 0 · scrying pool ──
+    pool:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        ring:  { block: dark_prismarine, offset: [-0.975, 0.0, -0.975], scale: [1.95, 0.16, 1.95], octagon: true }
+        water:
+          block: prismarine
+          offset: [-0.75, 0.16, -0.75]
+          scale:  [1.5, 0.06, 1.5]
+          octagon: true
+          animation:
+            always: { particle: { type: glow, offset: [0.0, 0.06, 0.0], spread: [0.6, 0.02, 0.6], count: 1, speed: 0.0, rate: 0.6 } }
+        glow:  { block: soul_lantern, offset: [-0.30, 0.12, -0.30], scale: [0.6, 0.05, 0.6] }
+
+    # ── TIER 1 · maroon plinth ──
+    plinth:
+      offset: [0.5, 0.16, 0.5]
+      parts:
+        body: { block: "${stone}", offset: [-0.675, 0.0, -0.675], scale: [1.35, 0.34, 1.35], octagon: true }
+        trim: { block: "${trim}",  offset: [-0.71, 0.32, -0.71], scale: [1.42, 0.05, 1.42], octagon: true }
+        stud_ne: { block: "${stud}", offset: [ 0.41, 0.30,  0.41], scale: [0.18, 0.18, 0.18] }
+        stud_nw: { block: "${stud}", offset: [-0.59, 0.30,  0.41], scale: [0.18, 0.18, 0.18] }
+        stud_se: { block: "${stud}", offset: [ 0.41, 0.30, -0.59], scale: [0.18, 0.18, 0.18] }
+        stud_sw: { block: "${stud}", offset: [-0.59, 0.30, -0.59], scale: [0.18, 0.18, 0.18] }
+
+    # ── draped war-banner (front −Z) ──
+    banner:
+      offset: [0.5, 0.16, 0.5]
+      parts:
+        field:  { block: red_concrete, offset: [-0.50, 0.02, -0.71], scale: [1.0, 0.40, 0.08] }
+        trim:   { block: "${trim}", offset: [-0.52, 0.40, -0.715], scale: [1.04, 0.05, 0.08] }
+        emblem: { block: "${trim}", offset: [-0.10, 0.10, -0.735], scale: [0.20, 0.20, 0.05], rotation: [0, 0, 45], center: true }
+        tail_l: { block: red_concrete, offset: [-0.39, -0.31, -0.71], scale: [0.34, 0.34, 0.08], rotation: [0, 0, 30], center: true }
+        tail_r: { block: red_concrete, offset: [ 0.05, -0.31, -0.71], scale: [0.34, 0.34, 0.08], rotation: [0, 0, -30], center: true }
+
+    # ── TIER 2 · the font pedestal ──
+    pedestal:
+      offset: [0.5, 0.50, 0.5]
+      parts:
+        body: { block: "${column}", offset: [-0.43, 0.0, -0.43], scale: [0.86, 0.60, 0.86], octagon: true }
+        panel_back:  { block: polished_blackstone, offset: [-0.25, 0.09, 0.41], scale: [0.50, 0.42, 0.04] }
+        panel_left:  { block: polished_blackstone, offset: [-0.45, 0.09, -0.25], scale: [0.04, 0.42, 0.50] }
+        panel_right: { block: polished_blackstone, offset: [ 0.41, 0.09, -0.25], scale: [0.04, 0.42, 0.50] }
+        band_bot: { block: "${metal}", offset: [-0.46, -0.02, -0.46], scale: [0.92, 0.07, 0.92], octagon: true }
+        band_top:
+          block: "${metal}"
+          offset: [-0.46, 0.55, -0.46]
+          scale:  [0.92, 0.07, 0.92]
+          octagon: true
+          animation:
+            always: { particle: { type: enchant, offset: [0.0, 0.5, 0.0], spread: [0.5, 0.6, 0.5], count: 2, speed: 0.05, rate: 0.3 } }
+        neck: { block: "${column}", offset: [-0.50, 0.58, -0.50], scale: [1.0, 0.10, 1.0], octagon: true }
+
+    # ── ✦ THE GLOWING EYE ✦ (pedestal front −Z) ──
+    eye:
+      offset: [0.5, 0.80, 0.04]
+      parts:
+        socket: { block: crying_obsidian, offset: [-0.24, -0.24, -0.05], scale: [0.48, 0.48, 0.10], rotation: [0, 0, 45], center: true }
+        bezel:  { block: polished_blackstone, offset: [-0.20, -0.20, -0.055], scale: [0.40, 0.40, 0.11], rotation: [0, 0, 45], center: true }
+        iris:
+          block: "${iris}"
+          offset: [-0.15, -0.15, -0.085]
+          scale:  [0.30, 0.30, 0.13]
+          rotation: [0, 0, 45]
+          center: true
+          animation:
+            always:
+              pulse: { axis: all, amplitude: 0.10, hz: 0.7 }
+              particle: { type: soul_fire_flame, offset: [0.0, 0.0, -0.18], spread: [0.07, 0.07, 0.0], count: 1, speed: 0.004, rate: 0.3 }
+        pupil: { block: obsidian, offset: [-0.025, -0.11, -0.10], scale: [0.05, 0.22, 0.12] }
+        glint: { block: sea_lantern, offset: [0.04, 0.05, -0.12], scale: [0.05, 0.05, 0.06] }
+        lid_top: { block: "${metal}", offset: [-0.24, 0.155, -0.05], scale: [0.48, 0.09, 0.10], rotation: [0, 0, 12], center: true }
+        lid_bot: { block: "${metal}", offset: [-0.24, -0.245, -0.05], scale: [0.48, 0.09, 0.10], rotation: [0, 0, -12], center: true }
+        runes:
+          offset: [0.0, 0.0, -0.05]
+          animation:
+            always: { spin: { axis: z, speed: 16 } }
+          parts:
+            rune_u: { block: "${runes}", offset: [-0.045,  0.315, -0.045], scale: [0.09, 0.09, 0.09] }
+            rune_d: { block: "${runes}", offset: [-0.045, -0.405, -0.045], scale: [0.09, 0.09, 0.09] }
+            rune_e: { block: "${runes}", offset: [ 0.315, -0.045, -0.045], scale: [0.09, 0.09, 0.09] }
+            rune_w: { block: "${runes}", offset: [-0.405, -0.045, -0.045], scale: [0.09, 0.09, 0.09] }
+
+    # ── TIER 3 · scrying basin ──
+    basin:
+      offset: [0.5, 1.12, 0.5]
+      parts:
+        bowl: { block: "${stone}", offset: [-0.85, 0.0, -0.85], scale: [1.7, 0.30, 1.7], octagon: true }
+        rim:  { block: "${metal}", offset: [-0.93, 0.27, -0.93], scale: [1.86, 0.10, 1.86], octagon: true }
+        rim_gold:
+          block: "${trim}"
+          offset: [-0.85, 0.36, -0.85]
+          scale:  [1.7, 0.05, 1.7]
+          octagon: true
+          animation:
+            always: { particle: { type: end_rod, offset: [0.0, 0.25, 0.0], spread: [0.9, 0.5, 0.9], count: 1, speed: 0.004, rate: 0.4 } }
+        liquid:
+          block: "${liquid}"
+          offset: [-0.75, 0.30, -0.75]
+          scale:  [1.5, 0.05, 1.5]
+          octagon: true
+          animation:
+            always: { particle: { type: portal, offset: [0.0, 0.15, 0.0], spread: [0.6, 0.06, 0.6], count: 2, speed: 0.01, rate: 0.2 } }
+        liquid_glow: { block: sea_lantern, offset: [-0.65, 0.28, -0.65], scale: [1.3, 0.04, 1.3] }
+        stud_ne: { block: "${stud}", offset: [ 0.52, 0.34,  0.52], scale: [0.20, 0.20, 0.20] }
+        stud_nw: { block: "${stud}", offset: [-0.72, 0.34,  0.52], scale: [0.20, 0.20, 0.20] }
+        stud_se: { block: "${stud}", offset: [ 0.52, 0.34, -0.72], scale: [0.20, 0.20, 0.20] }
+        stud_sw: { block: "${stud}", offset: [-0.72, 0.34, -0.72], scale: [0.20, 0.20, 0.20] }
+
+    # ── central altar + ✦ DIMENSIONAL FLAME ✦ ──
+    altar:
+      offset: [0.5, 1.45, 0.5]
+      parts:
+        post: { block: "${stone}", offset: [-0.15, 0.0, -0.15], scale: [0.30, 0.45, 0.30] }
+        band: { block: "${metal}", offset: [-0.19, 0.42, -0.19], scale: [0.38, 0.06, 0.38] }
+        dish: { block: "${trim}",  offset: [-0.22, 0.47, -0.22], scale: [0.44, 0.06, 0.44] }
+    flame:
+      offset: [0.5, 1.98, 0.5]
+      parts:
+        core:
+          block: "${ember}"
+          offset: [-0.13, 0.0, -0.13]
+          scale:  [0.26, 0.30, 0.26]
+          center: true
+          animation:
+            always:
+              pulse: { axis: all, amplitude: 0.16, hz: 1.5 }
+              particle: { type: flame, offset: [0.0, 0.18, 0.0], spread: [0.10, 0.14, 0.10], count: 4, speed: 0.03, rate: 0.05 }
+              sound: { type: block.campfire.crackle, volume: 0.22, pitch: 1.0, rate: 0.7 }
+        tongue:
+          block: magma_block
+          offset: [-0.075, 0.24, -0.075]
+          scale:  [0.15, 0.26, 0.15]
+          center: true
+          animation:
+            always:
+              shake: { amplitude: 0.05, hz: 13 }
+              particle: { type: small_flame, offset: [0.0, 0.12, 0.0], spread: [0.06, 0.12, 0.06], count: 3, speed: 0.02, rate: 0.06 }
+        spark:
+          block: magma_block
+          offset: [-0.03, 0.46, -0.03]
+          scale:  [0.06, 0.06, 0.06]
+          animation:
+            always: { particle: { type: lava, offset: [0.0, 0.05, 0.0], spread: [0.08, 0.04, 0.08], count: 1, speed: 0.03, rate: 0.5 } }
+
+    # ── floating label ──
+    label:
+      text: "${tname}"
+      offset: [0.5, 2.55, 0.5]
+      billboard: center
+
+tiers:
+  max: 3
+  upgrade: { item: NETHER_STAR, amount: 1, name: "<light_purple>Dimensional Core" }
+  speed: [1.0, 1.0, 1.0]
+  batch: [1, 1, 1]
+  capacity: [1.0, 1.0, 1.0]
+  # Per-tier block swaps — the model above re-renders with these vars merged over
+  # the base palette. Only the listed blocks change; geometry stays identical.
+  vars:
+    2:   # Gilded — blackstone + gold, diamond studs, brighter eye
+      metal:  gold_block
+      trim:   gold_block
+      stud:   diamond_block
+      stone:  polished_blackstone
+      column: deepslate_tiles
+      iris:   pearlescent_froglight
+      ember:  ochre_froglight
+      tname:  "<gold>✦ <gradient:#ffd277:#fff6c0><bold>Dimensional Grinder ⭐II</bold></gradient> <gold>✦"
+    3:   # Ascendant — obsidian + netherite, diamond runes, radiant eye
+      metal:  netherite_block
+      trim:   netherite_block
+      stud:   diamond_block
+      stone:  crying_obsidian
+      column: crying_obsidian
+      iris:   sea_lantern
+      ember:  pearlescent_froglight
+      runes:  diamond_block
+      liquid: dark_prismarine
+      tname:  "<aqua>✦ <gradient:#7cf6ff:#ffffff><bold>Dimensional Grinder ⭐III</bold></gradient> <aqua>✦"
+
+grinder:
+  loot_file: "grinder/spawners_settings.yml"
+  delay: 42s                    # generation rate ≈ 1/delay; 42s = ~40% slower than the old 25s
+  min_mobs: 1
+  max_mobs: 4
+  require_player_range: false   # true to restore SmartSpawner's proximity gate (off = offline accrual)
+
+  overflow: stop                # stop | waste  (stop = freeze the clock at cap, keep all production)
+  allow_stacking: true          # false = each slot holds a single spawner (no stacking)
+  max_per_player: 0             # how many grinders one player may place (0 = unlimited)
+  slots: [10, 10, 10]           # 10 spawner slots at every tier (GUI rows 3-4; no locking, upgrades only raise stack)
+  stack_cap: [64, 128, 256]     # per-slot max stack per tier — THIS is what upgrading raises (capacity)
+
+  cap:
+    base_items: 27648           # per-slot item buffer cap (tier I, no cores)
+    base_exp: 5000
+    per_tier_mult: [1.0, 2.5, 6.0]
+    special_items:              # installable "capacity cores" that raise the cap
+      - item: NETHER_STAR
+        items_bonus: 0.5        # +50% buffer per core installed
+        exp_bonus: 0.5
+
+  economy:
+    currency: VAULT             # VAULT | EXCELLENT
+    price_source_mode: SHOP_PRIORITY     # SHOP_ONLY | SHOP_PRIORITY | CUSTOM_ONLY | CUSTOM_PRIORITY (uses EconomyShopGUI first, then custom)
+    shop_integration:
+      enabled: true
+      preferred_plugin: auto    # auto | EconomyShopGUI | ShopGUIPlus | zShop | ExcellentShop
+    custom_prices:
+      enabled: true
+      file: "grinder/item_prices.yml"
+      default_price: 1.0
+
+  # Internal buy menu. Price in the server economy; optional permission per entry.
+  catalog:
+    ZOMBIE:          { price: 5000 }
+    SKELETON:        { price: 5000 }
+    SPIDER:          { price: 6000 }
+    CREEPER:         { price: 8000 }
+    CAVE_SPIDER:     { price: 8000 }
+    DROWNED:         { price: 12000 }
+    BLAZE:           { price: 25000 }
+    ENDERMAN:        { price: 30000 }
+    GHAST:           { price: 35000 }
+    IRON_GOLEM:      { price: 50000 }
+    WITHER_SKELETON: { price: 75000 }

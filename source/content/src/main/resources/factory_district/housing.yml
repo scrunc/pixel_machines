@@ -1,0 +1,349 @@
+# Virtual Factory District — HOUSING subsystem (ADR 0018).
+# Merged at load with builtin.yml + farming.yml + scans. The WHOLE district (mining + farming)
+# draws workers from ONE shared labor pool, so all housing lives here. Four structure families,
+# each a multiform convert-ladder (build the base, then upgrade it through forms):
+#
+#   RESIDENCES  → provide base workers (+ rent income). Branch at Cabin into a balanced line
+#                 (Cottage→Lodge→Manor→Estate, pays rent) vs a raw-labor line (Bunkhouse→Barracks→
+#                 Garrison, cheap, no frills). Limited by district SLOTS (no per-house cap).
+#   CIVIC       → boosts-workers: ×M multiplies the district's total worker CAPACITY (stacks).
+#   AMENITIES   → boosts-output: ×M multiplies the district's per-cycle YIELD while staffed (stacks).
+#   POPULATION  → breeds: villagers into the capture roster over time, so you don't have to vacuum
+#                 wild mobs to occupy new homes. (NEW engine, ADR 0018.)
+#
+# NEW config this file introduces:
+#   breeds: { type: villager, every-seconds: 600, chance: 0.6, count: 1, max: 0, worker-scaled: true }
+#       — adds <count> <type> to the roster per successful roll; max 0 = unlimited (up to roster-cap).
+#   boosts-workers: 1.15   — ×multiplier on total worker capacity per built instance (civic).
+#   boosts-output:  1.12   — ×multiplier on district output per built+STAFFED instance (amenities).
+# Upper rungs are buildable:false (reached only by converting); upgrades gate on requires-building.
+
+categories:
+  residence:  { name: "Residences", icon: OAK_DOOR }
+  civic:      { name: "Civic",      icon: BELL }
+  amenity:    { name: "Amenities",  icon: CAMPFIRE }
+  population: { name: "Population",  icon: VILLAGER_SPAWN_EGG }
+
+factories:
+
+  # ════════════════ RESIDENCES ════════════════ build a Tent, then convert it up the ladder.
+  tent:
+    name: "Tent"
+    icon: WHITE_BANNER
+    category: residence
+    build:
+      blocks: [ white_wool 16, oak_log 8, oak_fence 4 ]
+      creatures: [ villager 1 ]        # the occupant — from the roster (breed them, see Population)
+    provides-workers: 2
+    demolish-refund: [ white_wool 8, oak_log 4 ]
+    upgrades:
+      - { to: miners_house, name: "Build into a Cabin", cost: [ oak_planks 64, oak_door 1, glass 4 ] }
+
+  # 'miners_house' id kept (legacy) so any already-placed house keeps working — it's now the Cabin rung.
+  miners_house:
+    name: "Cabin"
+    head: MHF_Villager                 # textured villager head; icon: fallback below
+    icon: OAK_DOOR
+    category: residence
+    buildable: false
+    provides-workers: 4
+    demolish-refund: [ oak_planks 32, oak_log 8 ]
+    upgrades:
+      - { to: cottage,   name: "Grow into a Cottage (balanced + rent)", cost: [ oak_planks 128, glass 16, bricks 16 ] }
+      - { to: bunkhouse, name: "Convert to a Bunkhouse (raw labor)",    cost: [ oak_planks 96, white_bed 4 ] }
+
+  # ── balanced line — fewer workers per slot than the barracks line, but pays rent ──
+  cottage:
+    name: "Cottage"
+    head: MHF_Villager
+    icon: SPRUCE_DOOR
+    category: residence
+    buildable: false
+    provides-workers: 6
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: 1, chance: 0.15 }       # rent
+    demolish-refund: [ oak_planks 48, bricks 8 ]
+    upgrades:
+      - { to: lodge, name: "Expand into a Lodge", cost: [ oak_planks 192, glass 32, bricks 32 ],
+          requires-building: [ mining_outpost ] }         # needs a Town Hall in the district
+
+  lodge:
+    name: "Lodge"
+    head: MHF_Villager
+    icon: DARK_OAK_DOOR
+    category: residence
+    buildable: false
+    provides-workers: 9
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: "1-2", chance: 0.25 }
+    demolish-refund: [ oak_planks 64, bricks 16 ]
+    upgrades:
+      - { to: manor, name: "Build a Manor", cost: [ oak_planks 256, bricks 64, iron_block 4 ],
+          requires-building: [ city_hall ] }
+
+  manor:
+    name: "Manor"
+    head: MHF_Villager
+    icon: DARK_OAK_DOOR
+    category: residence
+    buildable: false
+    provides-workers: 13
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: "1-2", chance: 0.4 }
+      - { item: gold_ingot, amount: 1, chance: 0.2 }
+    demolish-refund: [ bricks 32, iron_ingot 8 ]
+    upgrades:
+      - { to: estate, name: "Build an Estate", cost: [ bricks 128, iron_block 8, gold_block 4, emerald 16 ],
+          requires-building: [ capitol ] }
+
+  estate:
+    name: "Estate"
+    head: MHF_Villager
+    icon: BEACON
+    category: residence
+    buildable: false
+    provides-workers: 18
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: "2-4", chance: 0.6 }
+      - { item: gold_ingot, amount: "1-2", chance: 0.35 }
+      - { command: "eco give %player% %amount%", amount: "10-25", chance: 0.2 }   # estate rent
+    demolish-refund: [ gold_block 4, emerald 16, bricks 64 ]
+
+  # ── raw-labor line — max workers per slot, no rent, cheaper ──
+  bunkhouse:
+    name: "Bunkhouse"
+    icon: RED_BED
+    category: residence
+    buildable: false
+    provides-workers: 8
+    demolish-refund: [ oak_planks 48, white_bed 2 ]
+    upgrades:
+      - { to: barracks, name: "Reinforce into Barracks", cost: [ stone_bricks 128, iron_bars 16, white_bed 4 ],
+          requires-building: [ mining_outpost ] }
+
+  barracks:
+    name: "Barracks"
+    icon: IRON_BARS
+    category: residence
+    buildable: false
+    provides-workers: 12
+    demolish-refund: [ stone_bricks 64, iron_ingot 8 ]
+    upgrades:
+      - { to: garrison, name: "Fortify into a Garrison", cost: [ stone_bricks 256, iron_block 8, bell 1 ],
+          requires-building: [ city_hall ] }
+
+  garrison:
+    name: "Garrison"
+    icon: IRON_BLOCK
+    category: residence
+    buildable: false
+    provides-workers: 16
+    boosts-workers: 1.1                # a garrison also drills the whole workforce: ×1.1 capacity
+    demolish-refund: [ stone_bricks 128, iron_block 6 ]
+
+  # ════════════════ CIVIC ════════════════ multiply total worker CAPACITY (stacks). Small admin rent.
+  notice_board:
+    name: "Notice Board"
+    icon: OAK_SIGN
+    category: civic
+    build:
+      blocks: [ oak_planks 32, oak_sign 1, oak_fence 4 ]
+    boosts-workers: 1.05
+    demolish-refund: [ oak_planks 16 ]
+    upgrades:
+      - { to: mining_outpost, name: "Establish a Town Hall", cost: [ stone_bricks 128, iron_block 4, bell 1, emerald 8 ] }
+
+  # 'mining_outpost' id kept (legacy) — it's now the Town Hall civic rung.
+  mining_outpost:
+    name: "Town Hall"
+    icon: BELL
+    category: civic
+    buildable: false
+    boosts-workers: 1.15
+    cycle-seconds: 900
+    output:
+      - { item: emerald, amount: 1, chance: 0.2 }        # taxes
+    demolish-refund: [ stone_bricks 64, iron_ingot 4, bell 1 ]
+    upgrades:
+      - { to: city_hall, name: "Promote to City Hall", cost: [ stone_bricks 256, iron_block 8, gold_ingot 16, emerald 16 ] }
+
+  city_hall:
+    name: "City Hall"
+    icon: GOLD_BLOCK
+    category: civic
+    buildable: false
+    boosts-workers: 1.3
+    cycle-seconds: 900
+    output:
+      - { item: emerald, amount: "1-2", chance: 0.3 }
+    demolish-refund: [ stone_bricks 128, gold_ingot 8, iron_block 4 ]
+    upgrades:
+      - { to: capitol, name: "Crown it a Capitol", cost: [ quartz_block 128, gold_block 8, diamond 8, emerald 32 ] }
+
+  capitol:
+    name: "Capitol"
+    icon: BEACON
+    category: civic
+    buildable: false
+    boosts-workers: 1.5
+    cycle-seconds: 900
+    output:
+      - { item: emerald, amount: "2-3", chance: 0.4 }
+      - { command: "eco give %player% %amount%", amount: "15-30", chance: 0.2 }
+    demolish-refund: [ gold_block 8, diamond 4, quartz_block 64 ]
+
+  # ════════════════ AMENITIES ════════════════ multiply district OUTPUT while staffed (stacks).
+  campfire:
+    name: "Campfire"
+    icon: CAMPFIRE
+    category: amenity
+    build:
+      blocks: [ oak_log 16, oak_fence 8, campfire 1 ]
+    workers: 1                         # a host — must be staffed for the boost to apply
+    boosts-output: 1.05
+    cycle-seconds: 300
+    output:
+      - { item: charcoal, amount: "1-2", chance: 0.4 }
+    demolish-refund: [ oak_log 8 ]
+    upgrades:
+      - { to: tavern, name: "Build a Tavern", cost: [ oak_planks 96, barrel 4, oak_fence 16 ] }
+
+  tavern:
+    name: "Tavern"
+    icon: BARREL
+    category: amenity
+    buildable: false
+    workers: 1
+    boosts-output: 1.12
+    cycle-seconds: 300
+    output:
+      - { item: bread, amount: "1-3", chance: 0.5 }
+    demolish-refund: [ oak_planks 48, barrel 2 ]
+    upgrades:
+      - { to: inn, name: "Expand into an Inn", cost: [ bricks 64, blue_bed 4, oak_planks 64 ] }
+
+  inn:
+    name: "Inn"
+    icon: BLUE_BED
+    category: amenity
+    buildable: false
+    workers: 2
+    boosts-output: 1.2
+    cycle-seconds: 300
+    output:
+      - { item: bread, amount: "2-4", chance: 0.5 }
+      - { item: emerald, amount: 1, chance: 0.15 }
+    demolish-refund: [ bricks 32, blue_bed 2 ]
+    upgrades:
+      - { to: grand_hotel, name: "Build a Grand Hotel", cost: [ quartz_block 128, gold_block 4, bricks 128 ] }
+
+  grand_hotel:
+    name: "Grand Hotel"
+    icon: GOLD_BLOCK
+    category: amenity
+    buildable: false
+    workers: 3
+    boosts-output: 1.35
+    cycle-seconds: 300
+    output:
+      - { item: emerald, amount: "1-2", chance: 0.3 }
+    demolish-refund: [ quartz_block 64, gold_block 2 ]
+
+  # second amenity line (stacks with the tavern line) — water/wellbeing
+  well:
+    name: "Well"
+    icon: CAULDRON
+    category: amenity
+    build:
+      blocks: [ cobblestone 64, stone_bricks 32, water_bucket 1 ]
+    workers: 1
+    boosts-output: 1.05
+    cycle-seconds: 300
+    demolish-refund: [ cobblestone 32 ]
+    upgrades:
+      - { to: fountain, name: "Build a Fountain", cost: [ quartz_block 64, prismarine 32, water_bucket 2 ] }
+
+  fountain:
+    name: "Fountain"
+    icon: PRISMARINE
+    category: amenity
+    buildable: false
+    workers: 1
+    boosts-output: 1.1
+    cycle-seconds: 300
+    output:
+      - { item: prismarine_crystals, amount: 1, chance: 0.2 }
+    demolish-refund: [ quartz_block 32, prismarine 16 ]
+
+  # ════════════════ POPULATION ════════════════ breed villagers into the roster (NEW, ADR 0018).
+  gathering_post:
+    name: "Gathering Post"
+    icon: VILLAGER_SPAWN_EGG
+    category: population
+    build:
+      blocks: [ oak_planks 64, bell 1, oak_fence 16 ]
+      creatures: [ villager 2 ]        # seed population
+    workers: 1                         # a recruiter — breeding only runs while staffed
+    breeds: { type: villager, every-seconds: 900, chance: 0.6, count: 1, worker-scaled: true }
+    demolish-refund: [ oak_planks 32, bell 1 ]
+    upgrades:
+      - { to: village_square, name: "Grow a Village Square", cost: [ oak_planks 128, bell 1, lantern 8, oak_fence 32 ] }
+
+  village_square:
+    name: "Village Square"
+    icon: LANTERN
+    category: population
+    buildable: false
+    workers: 1
+    breeds: { type: villager, every-seconds: 600, chance: 0.7, count: 1, worker-scaled: true }
+    demolish-refund: [ oak_planks 64, lantern 4 ]
+    upgrades:
+      - { to: market, name: "Build a Market", cost: [ bricks 96, emerald 8, oak_planks 64 ] }
+
+  market:
+    name: "Market"
+    icon: EMERALD
+    category: population
+    buildable: false
+    workers: 2
+    breeds: { type: villager, every-seconds: 450, chance: 0.8, count: 1, worker-scaled: true }
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: 1, chance: 0.2 }        # trade
+    demolish-refund: [ bricks 48, emerald 4 ]
+    upgrades:
+      - { to: plaza, name: "Build a Grand Plaza", cost: [ quartz_block 128, emerald 32, gold_block 4 ] }
+
+  plaza:
+    name: "Grand Plaza"
+    icon: EMERALD_BLOCK
+    category: population
+    buildable: false
+    workers: 2
+    breeds: { type: villager, every-seconds: 300, chance: 0.9, count: 2, worker-scaled: true }
+    cycle-seconds: 600
+    output:
+      - { item: emerald, amount: "1-2", chance: 0.3 }
+    demolish-refund: [ quartz_block 64, emerald 16 ]
+
+  # ════════════════ BREEDER HUT (ADR 0022) ════════════════
+  # An UNSTAFFED starter breeder, so population-mode districts aren't deadlocked at zero workers.
+  # It breeds villagers into the roster (the same `breeds:` channel as the Gathering Post line, but
+  # workers: 0 so it runs from the very start). In population mode (`population-workers: true` in
+  # machines/virtual_factory_district.yml) Houses become CAPACITY and these roster villagers AUTO-MOVE
+  # into free houses, where they become labor (housed villagers = workers), up to your housing — never
+  # beyond. In the default (capacity) mode it's just an early villager source. Safe to ship either way.
+  breeder_hut:
+    name: "Breeder Hut"
+    icon: VILLAGER_SPAWN_EGG
+    category: population
+    build:
+      blocks: [ oak_planks 48, hay_block 4, composter 2, oak_fence 12 ]
+      creatures: [ villager 1 ]        # one founding villager — capture a wild one to seed it
+    workers: 0                         # runs unstaffed (the whole point — start here, no workers yet)
+    breeds: { type: villager, every-seconds: 90, chance: 1.0, count: 1, worker-scaled: false }
+    demolish-refund: [ oak_planks 24, hay_block 2 ]

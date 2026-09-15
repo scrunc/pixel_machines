@@ -1,0 +1,197 @@
+# Assembler — a processing machine (P5d). Drop the input items into its chest;
+# the engine converts them to the output in place. The real chest IS the I/O
+# buffer (a GUI lands in P6). State drives the animation: it speeds up + emits
+# FX while WORKING. Same authoring model as the crusher (see crusher.yml header).
+#
+# recipes:               # matched by material + amount (vanilla items, no NBT)
+#   - input:  [ "MATERIAL AMOUNT", ... ]
+#     output: [ "MATERIAL AMOUNT", ... ]
+#     time: <ticks>       # 20 ticks = 1 second
+id: assembler
+model:
+  parts:
+    base:
+      block: smooth_stone
+      offset: [0.0, 0.0, 0.0]
+      scale:  [1.0, 0.25, 1.0]
+    casing:
+      block: iron_block
+      offset: [0.12, 0.25, 0.12]
+      scale:  [0.76, 0.55, 0.76]
+    press:                        # the stamping head — slams down while working
+      block: copper_block
+      offset: [0.22, 0.95, 0.22]
+      scale:  [0.56, 0.18, 0.56]
+      center: true
+      animation:
+        idle:
+          bob: { axis: y, amplitude: 0.03, period: 2.2 }
+        working:
+          bob:      { axis: y, amplitude: 0.16, period: 0.28 }
+          particle: { type: crit, offset: [0.0, 0.1, 0.0], spread: [0.18, 0.05, 0.18], count: 4, speed: 0.02, rate: 0.12 }
+          sound:    { type: block.anvil.use, volume: 0.4, pitch: 1.3, rate: 0.45 }
+    gear:                         # status spinner on top — slow idle, fast working
+      block: gold_block
+      offset: [0.35, 1.18, 0.35]
+      scale:  [0.3, 0.16, 0.3]
+      center: true
+      animation:
+        idle:    { spin: { axis: y, speed: 24 } }
+        working: { spin: { axis: y, speed: 260 } }
+    tier_core:                    # glowing core that grows taller with each tier
+      block: sea_lantern
+      offset: [0.42, 0.8, 0.42]
+      scale:  [0.16, 0.5, 0.16]
+      animation:
+        always: { fill: { axis: y, from: 0.0, to: 1.0, driver: tier } }
+gui:
+  title: "<dark_gray>⚙ <gold><bold>ASSEMBLER</bold>"
+  layout:                  # I=input O=output F=fuel P=progress B=burn U=upgrade T=tier ?=book
+    - "#########"
+    - "#III.P.O#"
+    - "#III.P.O#"
+    - "#III.P.O#"
+    - "#FUBBBT?#"
+    - "#########"
+  icons:
+    '#': { item: black_stained_glass_pane }
+    '.': { item: gray_stained_glass_pane }
+  progress:                # P slots = a 3-tall bar that fills as it crafts
+    idle:    { item: gray_stained_glass_pane,  name: "<gray>Idle" }
+    working: { item: lime_stained_glass_pane,  name: "<green>Crafting… <white><percent>%" }
+    blocked: { item: barrier,                  name: "<red>Output full" }
+    no_fuel: { item: red_stained_glass_pane,   name: "<red>Out of fuel" }
+    burn:       { item: blaze_powder,            name: "<gold>Fuel <white><percent>%" }
+    burn_empty: { item: gray_stained_glass_pane, name: "<dark_gray>No fuel" }
+fuel:                      # material → seconds of burn (machine won't run without fuel)
+  coal: 8
+  charcoal: 8
+  coal_block: 80
+  blaze_rod: 24
+  lava_bucket: 100
+tiers:                     # drop the upgrade item into the U slot to advance I → II → III
+  max: 3
+  upgrade: { item: amethyst_shard, name: "<aqua>⏫ Machine Upgrade", lore: [ "<gray>Drop into a machine's upgrade slot" ] }
+  speed: [1.0, 1.7, 2.6]   # ×processing speed per tier
+  batch: [1, 1, 2]         # ×output amount per tier (tier III double-crafts)
+  models:                  # optional per-tier MODEL override (full model tree; tier 1 = the base above)
+    2:                     # tier II: a copper-clad mid-upgrade
+      parts:
+        base:   { block: smooth_stone, offset: [0.0, 0.0, 0.0], scale: [1.0, 0.27, 1.0] }
+        trim:   { block: cut_copper, offset: [0.06, 0.25, 0.06], scale: [0.88, 0.06, 0.88] }
+        casing: { block: copper_block, offset: [0.12, 0.27, 0.12], scale: [0.76, 0.58, 0.76] }
+        press:
+          block: copper_block
+          offset: [0.22, 0.97, 0.22]
+          scale:  [0.56, 0.18, 0.56]
+          center: true
+          animation:
+            idle:
+              bob: { axis: y, amplitude: 0.03, period: 2.1 }
+            working:
+              bob:      { axis: y, amplitude: 0.16, period: 0.25 }
+              particle: { type: crit, offset: [0.0, 0.1, 0.0], spread: [0.18, 0.05, 0.18], count: 4, speed: 0.02, rate: 0.11 }
+              sound:    { type: block.anvil.use, volume: 0.4, pitch: 1.4, rate: 0.42 }
+        gear:
+          block: gold_block
+          offset: [0.35, 1.19, 0.35]
+          scale:  [0.32, 0.17, 0.32]
+          center: true
+          animation:
+            idle:    { spin: { axis: y, speed: 32 } }
+            working: { spin: { axis: y, speed: 290 } }
+        core:   { block: sea_lantern, offset: [0.42, 0.82, 0.42], scale: [0.16, 0.74, 0.16] }
+        label:  { text: "<aqua>⚙ <bold>Assembler ⭐II", offset: [0.5, 1.7, 0.5], billboard: center }
+    3:                     # tier III: a gold/netherite upgraded build with a crown
+      parts:
+        base:   { block: polished_blackstone, offset: [-0.05, 0.0, -0.05], scale: [1.1, 0.3, 1.1] }
+        trim:   { block: netherite_block, offset: [0.04, 0.28, 0.04], scale: [0.92, 0.06, 0.92] }
+        casing: { block: gold_block, offset: [0.12, 0.3, 0.12], scale: [0.76, 0.6, 0.76] }
+        press:
+          block: netherite_block
+          offset: [0.22, 1.0, 0.22]
+          scale:  [0.56, 0.18, 0.56]
+          center: true
+          animation:
+            idle:
+              bob: { axis: y, amplitude: 0.03, period: 2.0 }
+            working:
+              bob:      { axis: y, amplitude: 0.16, period: 0.22 }
+              particle: { type: crit, offset: [0.0, 0.1, 0.0], spread: [0.18, 0.05, 0.18], count: 5, speed: 0.02, rate: 0.1 }
+              sound:    { type: block.anvil.use, volume: 0.4, pitch: 1.5, rate: 0.4 }
+        gear:
+          block: gold_block
+          offset: [0.35, 1.2, 0.35]
+          scale:  [0.34, 0.18, 0.34]
+          center: true
+          animation:
+            idle:    { spin: { axis: y, speed: 40 } }
+            working: { spin: { axis: y, speed: 320 } }
+        crown:  { block: gold_block, offset: [0.3, 1.46, 0.3], scale: [0.4, 0.12, 0.4] }
+        core:   { block: sea_lantern, offset: [0.42, 0.85, 0.42], scale: [0.16, 0.78, 0.16] }
+        label:  { text: "<gold>⚙ <bold>Assembler ⭐III", offset: [0.5, 1.75, 0.5], billboard: center }
+  guis:                    # optional per-tier GUI override (keep the same slot counts)
+    2:
+      title: "<aqua>⚙ <bold>ASSEMBLER ⭐II</bold>"
+      layout:
+        - "#########"
+        - "#III.P.O#"
+        - "#III.P.O#"
+        - "#III.P.O#"
+        - "#FUBBBT?#"
+        - "#########"
+      icons:
+        '#': { item: cyan_stained_glass_pane }
+        '.': { item: light_blue_stained_glass_pane }
+      progress:
+        idle:    { item: light_blue_stained_glass_pane, name: "<aqua>Idle" }
+        working: { item: cyan_stained_glass_pane,       name: "<aqua>Crafting… <white><percent>%" }
+        blocked: { item: barrier,                       name: "<red>Output full" }
+        no_fuel: { item: red_stained_glass_pane,        name: "<red>Out of fuel" }
+        burn:       { item: blaze_powder,                 name: "<gold>Fuel <white><percent>%" }
+        burn_empty: { item: gray_stained_glass_pane,      name: "<dark_gray>No fuel" }
+    3:
+      title: "<gold>⚙ <bold>ASSEMBLER ⭐III</bold>"
+      layout:
+        - "#########"
+        - "#III.P.O#"
+        - "#III.P.O#"
+        - "#III.P.O#"
+        - "#FUBBBT?#"
+        - "#########"
+      icons:
+        '#': { item: yellow_stained_glass_pane }
+        '.': { item: orange_stained_glass_pane }
+      progress:
+        idle:    { item: orange_stained_glass_pane, name: "<gold>Idle" }
+        working: { item: yellow_stained_glass_pane, name: "<gold>Crafting… <white><percent>%" }
+        blocked: { item: barrier,                   name: "<red>Output full" }
+        no_fuel: { item: red_stained_glass_pane,    name: "<red>Out of fuel" }
+        burn:       { item: blaze_powder,             name: "<gold>Fuel <white><percent>%" }
+        burn_empty: { item: gray_stained_glass_pane,  name: "<dark_gray>No fuel" }
+recipes:
+  - input:  [ "iron_ingot 9" ]
+    output: [ "iron_block 1" ]
+    time: 60
+  - input:  [ "gold_ingot 9" ]
+    output: [ "gold_block 1" ]
+    time: 60
+  - input:  [ "cobblestone 8" ]
+    output: [ "stone 8" ]
+    time: 40
+  - input:  [ "coal 8" ]
+    output: [ "diamond 1" ]
+    time: 120
+  # Assemble a machine: build a crusher placer from parts.
+  - input:  [ "iron_block 4", "redstone 8", "piston 2" ]
+    output:
+      - placer: crusher
+    time: 200
+  # A custom-named item (no resource pack needed for the name).
+  - input:  [ "diamond 4", "netherite_scrap 1" ]
+    output:
+      - item: diamond
+        amount: 1
+        name: "<gradient:#ff5555:#ffd966>Focused Diamond</gradient>"
+        lore: [ "<gray>Forged in the assembler", "<dark_gray>MachineConstruct" ]
+    time: 100

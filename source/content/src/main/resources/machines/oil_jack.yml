@@ -1,0 +1,90 @@
+# Oil Jack — a pumpjack generator on a 2×7 skid. No input: while fuelled it pumps
+# an Oil Barrel every 60s; one blaze rod burns 1 hour. The walking beam rocks and
+# the horse-head + polished rod pump into the wellhead while WORKING. Clean
+# silhouette: skid → hidden base → box derrick → long beam (horse-head front,
+# counterweight rear) → wellhead. 0-hardcoded — tweak offsets freely.
+id: oil_jack
+model:
+  parts:
+    # --- skid / base frame ---
+    base:   { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZWQ2YjczZmE1MTQ3MTY0MDIwMWY0NmFmZDUwYTY0ZjRiMTY5M2JmNzc2NzhiMmNmNzcxZTYyMjAyYzgxMmVmNyJ9fX0=", offset: [-0.05, 0.0, -3.0], scale: [1.5, 0.25, 6.5] }
+    rail_l: { block: iron_block, offset: [-0.05, 0.25, -3.0], scale: [0.16, 0.16, 6.5] }
+    rail_r: { block: iron_block, offset: [ 1.29, 0.25, -3.0], scale: [0.16, 0.16, 6.5] }
+    tie_a:  { block: iron_block, offset: [-0.05, 0.25, -2.3], scale: [1.5, 0.1, 0.22] }
+    tie_b:  { block: iron_block, offset: [-0.05, 0.45,  2.2], scale: [1.5, 0.1, 0.22] }
+    # --- central pumping base — covers the anchor chest ---
+    cellar: { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjRlZTYzM2MyYmY5YzQ0MGNmZWIxNjYyNGFiNjBhOWZiZGYxODBkYzBiMDU0OGQ2MjY5NWUzOTczNjdlZWExOCJ9fX0=", offset: [0.0, 0.0, -0.01], scale: [1.0, 1.0, 1.0] }
+    # --- prime mover (rear) ---
+    engine_house:
+      block: iron_block
+      offset: [0.12, 0.25, -2.8]
+      scale:  [0.85, 0.7, 1.0]
+      animation:
+        working:
+          particle: { type: smoke, offset: [0.65, 0.9, -2.3], count: 1, speed: 0.01, rate: 0.3 }
+          sound:    { type: block.piston.contract, volume: 0.25, pitch: 0.55, rate: 1.7 }
+    chimney: { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZmYxNmQ1YTk2ZWZkNzA3ZTQ2NzRjMDc1NDZlM2NkMDJjM2YzZTRiYjhiNGYwNjc4YmFmOTcwMWQ4Yzk1MTY5YSJ9fX0=", offset: [0.66, 0.95, -2.45], scale: [0.15, 0.45, 0.15] }
+    # --- derrick: a box tower (4 posts + brace + saddle) over the cellar ---
+    post_fl: { block: iron_block, offset: [0.18, 1.0, 0.6],  scale: [0.16, 1.5, 0.16] }
+    post_fr: { block: iron_block, offset: [0.66, 1.0, 0.6],  scale: [0.16, 1.5, 0.16] }
+    post_bl: { block: iron_block, offset: [0.18, 1.0, 0.22], scale: [0.16, 1.5, 0.16] }
+    post_br: { block: iron_block, offset: [0.66, 1.0, 0.22], scale: [0.16, 1.5, 0.16] }
+    brace:   { block: iron_block, offset: [0.26, 1.7, 0.2],  scale: [0.46, 0.1, 0.5] }
+    saddle:  { block: iron_block, offset: [0.24, 2.42, 0.12], scale: [0.5, 0.18, 0.66] }
+    # --- walking beam: rocks about the saddle; children follow ---
+    beam:
+      block: iron_block
+      offset: [0.4, 2.55, -2.3]
+      scale:  [0.2, 0.24, 5.8]
+      center: true                   # pivot at the bar's centre ≈ the saddle
+      animation:
+        idle:    { swing: { axis: x, amplitude: 5,  period: 3.0 } }   # visible gentle rock at rest
+        working: { swing: { axis: x, amplitude: 12, period: 1.6 } }
+      parts:
+        horse_head: { block: iron_block, offset: [-0.03, -0.28, 2.45], scale: [0.3, 0.95, 0.36] }
+        head_lip:   { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZmYxNmQ1YTk2ZWZkNzA3ZTQ2NzRjMDc1NDZlM2NkMDJjM2YzZTRiYjhiNGYwNjc4YmFmOTcwMWQ4Yzk1MTY5YSJ9fX0=", offset: [-0.03, -0.68, 2.48], scale: [0.3, 0.4, 0.36] }
+        counterweight: { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjRlZTYzM2MyYmY5YzQ0MGNmZWIxNjYyNGFiNjBhOWZiZGYxODBkYzBiMDU0OGQ2MjY5NWUzOTczNjdlZWExOCJ9fX0=", offset: [-0.08, -0.42, -0.5], scale: [0.48, 0.82, 0.54] }
+    # --- drill chain: vertical polished rod that pumps straight up/down into the well ---
+    drill_chain:
+      head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYWQ2YmFjNDJiM2QyZDNhZjJmZWEyY2U1NjEzMDU1Y2I4ZDYzYjkyNzQ5ZmY3MjE2ZTA1OTYyMWM0ODEwNmZhMyJ9fX0="
+      offset: [0.42, 0.35, 2.92]
+      scale:  [0.16, 2.35, 0.16]
+      animation:
+        working: { bob: { axis: y, amplitude: -0.22, period: 1.6 } }   # pumps with the beam
+    # --- rear pitman: the drive rod, pumps opposite the chain (the see-saw back pump) ---
+    back_pitman:
+      block: iron_block
+      offset: [0.44, 0.35, -2.0]
+      scale:  [0.12, 2.35, 0.12]
+      animation:
+        working: { bob: { axis: y, amplitude: 0.45, period: 1.6 } }  # opposite phase = up when the chain is down
+    # --- wellhead (christmas tree) at the front ---
+    wh_base:  { block: iron_block, offset: [0.34, 0.25, 2.8], scale: [0.32, 0.6, 0.32] }
+    wh_valve: { head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGUwZjdiMjA3OWRlZDhhZTE4NGY3MTg5Mjk2NzhkZjYyNGFiMzYyZTQzMDcyNmJkMzQ1NjhiNWM2NTQ1NDA1MiJ9fX0=", offset: [0.28, 0.8, 2.75], scale: [0.46, 0.2, 0.46] }
+
+gui:
+  title: "<dark_gray>⛽ <gold><bold>OIL JACK</bold>"
+  layout:                            # F fuel · B burn bar · P progress · O output · ? book
+    - "#########"
+    - "#F#P#OOO#"
+    - "#B#P#OOO#"
+    - "#B#P#OOO#"
+    - "##?######"
+  icons:
+    '#': { item: black_stained_glass_pane }
+  progress:
+    idle:    { item: gray_stained_glass_pane,  name: "<gray>Idle" }
+    working: { item: lime_stained_glass_pane,  name: "<green>Pumping… <white><percent>%" }
+    blocked: { item: barrier,                  name: "<red>Barrels full" }
+    no_fuel: { item: red_stained_glass_pane,   name: "<red>Out of fuel" }
+    burn:       { item: blaze_powder,            name: "<gold>Fuel <white><percent>%" }
+    burn_empty: { item: gray_stained_glass_pane, name: "<dark_gray>No fuel" }
+fuel:
+  blaze_rod: 3600
+recipes:
+  - output:
+      - item: bucket
+        amount: 1
+        name: "<dark_gray>⬤ Oil Barrel"
+        lore: [ "<gray>Pumped from the deep." ]
+    time: 1200

@@ -1,0 +1,7 @@
+name: Foundry
+version: ${version}
+main: dev.servereer.foundry.Foundry
+api-version: '1.21'
+depend: [MachineConstruct]
+authors: [servereer]
+description: Default machine & item content pack for MachineConstruct (Crusher, etc.). Ships no textures; visuals are vanilla blocks + player-head skins.

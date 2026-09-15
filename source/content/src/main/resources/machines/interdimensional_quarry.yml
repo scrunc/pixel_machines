@@ -1,0 +1,252 @@
+# Interdimensional Quarry — a standalone centrepiece (one per player) that mines
+# other dimensions / fishes a dimensional sea, powered by a pickaxe's / rod's
+# DURABILITY, into a huge Quantum Vault. Built in phases (ADR-to-come):
+#   Q1 (now): tool slots + durability + mode toggle.  Q2: mining engine.
+#   Q3: vault GUI.  Q4: fishing.  Q5: skill tree.  Q6: lava/heat.  Q7: real model.
+# The model below is a TEMPORARY placeholder (the cube-on-pillars lands in Q7).
+id: interdimensional_quarry
+anchor: barrel
+
+# The placer item you hold to build the machine. Configurable per machine:
+#   head:  "<base64 | texture-url | player-name>"   ← a custom head skin, OR
+#   item:  <MATERIAL>                                ← any item as the icon
+# plus optional name / lore (MiniMessage) and model (custom_model_data).
+# (When broken, the dropped placer carries this icon AND the machine's full state.)
+placer:
+  item: heart_of_the_sea
+  name: "<dark_purple>✦ <gradient:#b14bff:#3fd2ff><bold>Interdimensional Quarry</bold></gradient> ✦"
+  lore:
+    - "<gray>Right-click a block face to build."
+    - "<dark_gray>Break it to pick it back up (keeps everything)."
+
+# ── palette ──
+vars:
+  frame:  deepslate_tiles       # base slab + pillars
+  trim:   polished_deepslate    # base/cap trims
+  accent: cyan_terracotta       # pillar caps · banding
+  core:   crying_obsidian       # the floating rift cube
+  rift:   sea_lantern           # glowing rift veins · inlay
+  energy: soul_lantern          # orbiting energy ring
+  drill:  netherite_block       # the descending drill bit
+  tname:  "<dark_purple>✦ <gradient:#b14bff:#3fd2ff><bold>Interdimensional Quarry</bold></gradient> <dark_purple>✦"
+
+# A floating rift cube held between four pillars over a scrying base, with a
+# spinning drill biting downward into the rift. Anti-z-fight rules used throughout:
+#   • joints OVERLAP by ~0.01 (the shared faces get buried, never sit coplanar),
+#   • overlays PROTRUDE by ~0.01 (a decal face renders clearly in front), and
+#   • stacked slabs each get a DISTINCT top height (no two flat planes coincide).
+# Blocks are corner-anchored (a part fills [offset, offset+scale]); centre with
+# offset = -scale/2 and center:true (which sets the rotation pivot to the centre).
+model:
+  parts:
+
+    # ── scrying base (slab → trim → glowing inlay, three distinct heights) ──
+    base:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        slab:  { block: "${frame}", offset: [-0.60, 0.00, -0.60], scale: [1.20, 0.22, 1.20], octagon: true }
+        trim:  { block: "${trim}",  offset: [-0.64, 0.21, -0.64], scale: [1.28, 0.06, 1.28], octagon: true }   # sinks 0.01 into slab
+        inlay:
+          block: "${rift}"
+          offset: [-0.34, 0.272, -0.34]      # 0.002 above the trim top (0.27) — not coplanar
+          scale:  [0.68, 0.04, 0.68]
+          octagon: true
+          animation:
+            always: { particle: { type: portal, offset: [0.0, 0.05, 0.0], spread: [0.5, 0.02, 0.5], count: 2, speed: 0.01, rate: 0.3 } }
+
+    # ── four pillars (sink into the trim; caps swallow the pillar tops) ──
+    pillars:
+      offset: [0.5, 0.25, 0.5]
+      parts:
+        p_ne: { block: "${frame}", offset: [ 0.40, 0.0,  0.40], scale: [0.16, 1.05, 0.16] }
+        p_nw: { block: "${frame}", offset: [-0.56, 0.0,  0.40], scale: [0.16, 1.05, 0.16] }
+        p_se: { block: "${frame}", offset: [ 0.40, 0.0, -0.56], scale: [0.16, 1.05, 0.16] }
+        p_sw: { block: "${frame}", offset: [-0.56, 0.0, -0.56], scale: [0.16, 1.05, 0.16] }
+        cap_ne: { block: "${accent}", offset: [ 0.37, 1.00,  0.37], scale: [0.22, 0.10, 0.22] }   # overlaps pillar top 1.05
+        cap_nw: { block: "${accent}", offset: [-0.59, 1.00,  0.37], scale: [0.22, 0.10, 0.22] }
+        cap_se: { block: "${accent}", offset: [ 0.37, 1.00, -0.59], scale: [0.22, 0.10, 0.22] }
+        cap_sw: { block: "${accent}", offset: [-0.59, 1.00, -0.59], scale: [0.22, 0.10, 0.22] }
+
+    # ── the floating rift cube (spins; veins protrude 0.01 past each face) ──
+    core:
+      offset: [0.5, 0.78, 0.5]
+      animation:
+        always: { spin: { axis: y, speed: 22 } }
+      parts:
+        cube:
+          block: "${core}"
+          offset: [-0.27, -0.27, -0.27]
+          scale:  [0.54, 0.54, 0.54]
+          center: true
+          animation:
+            always:
+              pulse:    { from: 0.94, to: 1.06, period: 2.2 }
+              particle: { type: portal, offset: [0.0, 0.0, 0.0], spread: [0.35, 0.35, 0.35], count: 3, speed: 0.01, rate: 0.25 }
+              sound:    { type: block.beacon.ambient, volume: 0.12, pitch: 0.6, rate: 0.9 }
+        vein_x: { block: "${rift}", offset: [-0.28, -0.05, -0.05], scale: [0.56, 0.10, 0.10], center: true }
+        vein_y: { block: "${rift}", offset: [-0.05, -0.28, -0.05], scale: [0.10, 0.56, 0.10], center: true }
+        vein_z: { block: "${rift}", offset: [-0.05, -0.05, -0.28], scale: [0.10, 0.10, 0.56], center: true }
+
+    # ── energy ring orbiting the cube (own group, counter-spin) ──
+    ring:
+      offset: [0.5, 0.78, 0.5]
+      animation:
+        always: { spin: { axis: y, speed: -34 } }
+      parts:
+        band:
+          block: "${energy}"
+          offset: [-0.46, -0.035, -0.46]
+          scale:  [0.92, 0.07, 0.92]
+          octagon: true
+          animation:
+            always: { particle: { type: end_rod, offset: [0.0, 0.0, 0.0], spread: [0.55, 0.05, 0.55], count: 1, speed: 0.004, rate: 0.35 } }
+
+    # ── the drill: a fast-spinning bit biting down from the cube into the base ──
+    drill:
+      offset: [0.5, 0.30, 0.5]
+      animation:
+        always: { spin: { axis: y, speed: -90 } }
+      parts:
+        shaft: { block: "${drill}", offset: [-0.07, 0.06, -0.07], scale: [0.14, 0.20, 0.14] }   # 0.36–0.56, into cube bottom (0.51)
+        bit:
+          block: "${drill}"
+          offset: [-0.06, -0.06, -0.06]
+          scale:  [0.12, 0.16, 0.12]
+          rotation: [45, 0, 0]
+          center: true
+          animation:
+            always:
+              particle: { type: lava, offset: [0.0, -0.10, 0.0], spread: [0.06, 0.02, 0.06], count: 1, speed: 0.02, rate: 0.4 }
+              sound:    { type: block.stone.break, volume: 0.18, pitch: 0.7, rate: 0.5 }
+
+    # ── crown beacon above the cap ──
+    crown:
+      offset: [0.5, 1.36, 0.5]
+      parts:
+        gem:
+          block: "${rift}"
+          offset: [-0.09, 0.0, -0.09]
+          scale:  [0.18, 0.18, 0.18]
+          rotation: [0, 45, 0]
+          center: true
+          animation:
+            always:
+              pulse:    { from: 0.85, to: 1.15, period: 1.6 }
+              particle: { type: enchant, offset: [0.0, 0.2, 0.0], spread: [0.2, 0.3, 0.2], count: 2, speed: 0.04, rate: 0.3 }
+
+    # ── floating label ──
+    label:
+      text: "${tname}"
+      offset: [0.5, 1.85, 0.5]
+      billboard: center
+
+economy:                   # powers the Quantum Vault's $ Sell-All + Auto-sell rules (Vault + custom prices)
+  price_source_mode: SHOP_PRIORITY   # EconomyShopGUI price first, then custom_prices/default
+  custom_prices: { enabled: true, file: "grinder/item_prices.yml", default_price: 1.0 }
+
+quarry:
+  cycle: 3s                 # time per mining/fishing cycle
+  vault_cap: 50000          # quantum-vault mass cap (base; Capacity upgrades raise it later)
+  max_per_player: 1         # standalone centrepiece — one each
+  mining:
+    durability_per_cycle: 2     # pickaxe durability spent per mining cycle
+    dimensions:                 # depth order = the Depth upgrade ladder (Q5); Q2 mines #0
+      stone_layer:
+        name: Stone Layer
+        loot:
+          COBBLESTONE: { weight: 50, amount: 1-3 }
+          STONE:       { weight: 20, amount: 1-2 }
+          COAL:        { weight: 12, amount: 1-2 }
+          RAW_COPPER:  { weight: 8,  amount: 1-2 }
+          RAW_IRON:    { weight: 5,  amount: 1 }
+          RAW_GOLD:    { weight: 2,  amount: 1 }
+          DIAMOND:     { weight: 1,  amount: 1 }
+      deepslate_rift:
+        name: Deepslate Rift
+        loot:
+          COBBLED_DEEPSLATE: { weight: 40, amount: 1-3 }
+          RAW_IRON:    { weight: 12, amount: 1-2 }
+          REDSTONE:    { weight: 12, amount: 1-3 }
+          LAPIS_LAZULI: { weight: 8,  amount: 1-2 }
+          RAW_GOLD:    { weight: 6,  amount: 1-2 }
+          DIAMOND:     { weight: 3,  amount: 1 }
+          EMERALD:     { weight: 1,  amount: 1 }
+      nether_rift:
+        name: Nether Rift
+        loot:
+          NETHERRACK:    { weight: 40, amount: 1-3 }
+          QUARTZ:        { weight: 15, amount: 1-2 }
+          GOLD_NUGGET:   { weight: 12, amount: 1-3 }
+          GLOWSTONE_DUST: { weight: 10, amount: 1-2 }
+          GOLD_INGOT:    { weight: 5,  amount: 1 }
+          ANCIENT_DEBRIS: { weight: 1,  amount: 1 }
+      void_core:
+        name: Void Core
+        loot:
+          OBSIDIAN:       { weight: 25, amount: 1-2 }
+          DIAMOND:        { weight: 15, amount: 1-2 }
+          EMERALD:        { weight: 12, amount: 1-2 }
+          NETHERITE_SCRAP: { weight: 4,  amount: 1 }
+          NETHER_STAR:    { weight: 1,  amount: 1 }
+  lava:                       # togglable lava generation → a tank you take (buckets) or sell (Q6)
+    cap: 100000                 # tank capacity in units
+    per_cycle: 100              # units generated per cycle while ON
+    heat_per_cycle: 8           # heat added per cycle (self-throttles generation)
+    sell_price: 0.01            # money per unit when selling the tank
+    units_per_bucket: 1000      # tank units consumed to fill one lava bucket
+  heat:
+    max: 100                    # overheat ceiling; generation pauses at max
+    cool_per_sec: 1.5           # passive cooling rate
+  depletion:                    # active vein wears down as you mine it, then regenerates (Q6b)
+    per_cycle: 0.0006           # vein health lost per mining cycle
+    floor: 0.30                 # minimum yield fraction a fully-worked vein bottoms out at
+    regen_per_sec: 0.005        # health regained per second (rotate dimensions to let veins recover)
+  surge:                        # random global Rift Surges (Q6b)
+    chance_per_min: 0.05        # probability per minute one begins
+    duration_sec: 60
+    mult: 2.0                   # yield multiplier while a surge is active
+  contracts:                    # rotating goals (throughput ↔ item bounty); fully tunable (Q6b)
+    throughput:
+      base: 2000                # "extract N total" target for contract #0
+      per_contract: 1500        # +N per completed contract
+    bounty:
+      base: 256                 # bounty target for a MAX-rarity (most common) item
+      per_contract: 64          # +N per completed contract
+      min: 8                    # floor for a bounty target
+      max: 1024                 # ceiling for a bounty target
+      # targets scale by drop rarity: a rare item asks for far fewer than a common one,
+      # and the pick is weighted toward common items. These are never chosen as a bounty:
+      exclude: [NETHER_STAR, HEART_OF_THE_SEA, ANCIENT_DEBRIS, NETHERITE_SCRAP, ENCHANTED_BOOK, NAME_TAG]
+    reward:
+      rp_base: 100
+      rp_per_contract: 50
+      rp_target_div: 10         # + (target / this) Rift Points
+      money_base: 500
+      money_target_mult: 3      # + (target × this) money
+  loot_chests:                  # rare jackpot — crack a whole vanilla loot chest into the vault
+    enabled: true
+    chance_per_cycle: 0.005     # per MINING cycle, chance to pop a chest (0.005 ≈ 1 per ~10 min at 3s)
+    max_per_accrual: 5          # safety cap on pops per catch-up batch (offline)
+    tables:                     # any Minecraft loot table key + relative weight
+      - { table: "minecraft:chests/simple_dungeon",       weight: 30 }
+      - { table: "minecraft:chests/abandoned_mineshaft",  weight: 25 }
+      - { table: "minecraft:chests/stronghold_corridor",  weight: 15 }
+      - { table: "minecraft:chests/buried_treasure",      weight: 12 }
+      - { table: "minecraft:chests/nether_bridge",        weight: 10 }
+      - { table: "minecraft:chests/bastion_treasure",     weight: 6 }
+      - { table: "minecraft:chests/end_city_treasure",    weight: 4 }
+      - { table: "minecraft:chests/ancient_city",         weight: 2 }
+  fishing:
+    durability_per_cycle: 1     # rod durability spent per fishing cycle (Q4)
+    loot:                       # the Dimensional Sea — treasure:true entries scale with Luck of the Sea
+      COD:             { weight: 40, amount: 1-2 }
+      SALMON:          { weight: 25, amount: 1-2 }
+      PUFFERFISH:      { weight: 8,  amount: 1 }
+      TROPICAL_FISH:   { weight: 6,  amount: 1 }
+      PRISMARINE_SHARD: { weight: 5, amount: 1-2 }
+      STICK:           { weight: 5,  amount: 1-2 }   # junk
+      LILY_PAD:        { weight: 4,  amount: 1 }     # junk
+      NAUTILUS_SHELL:  { weight: 4,  amount: 1, treasure: true }
+      ENCHANTED_BOOK:  { weight: 3,  amount: 1, treasure: true }
+      NAME_TAG:        { weight: 2,  amount: 1, treasure: true }
+      HEART_OF_THE_SEA: { weight: 1, amount: 1, treasure: true }

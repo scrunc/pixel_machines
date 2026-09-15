@@ -1,0 +1,102 @@
+# MachineConstruct — engine settings. These are server-wide tunables (not
+# per-machine; machine visuals/recipes/GUI live in the content pack's YAML).
+# Edit, then /mc reload re-reads machines — but timing changes need a restart.
+
+# Ticks between animation frames sent to viewers. Lower = smoother but more
+# packets. (display interpolation spans this interval.)
+animation-interval: 2
+
+# Ticks between recipe-processing passes (and progress credited per pass).
+process-interval: 10
+
+# Blocks within which a machine's displays render to a player.
+render-distance: 48
+
+# Per-machine state backups (reset recovery). Each machine's history is kept in its own
+# file under backups/machines/<id>.yml (written off the main thread) — snapshotted on load,
+# every `interval-minutes` (only if changed), on break, and on shutdown. If a machine's data
+# ever won't load it is quarantined (its blob preserved, never overwritten); look at it and
+# run /mc restore. /mc backup info shows a machine's snapshots (and their ages); /mc restore
+# <id> <#> rolls back to a specific one; /mc admin is the browser + restore GUI.
+backups:
+  interval-minutes: 10   # how often every loaded (changed) machine is snapshotted
+  # Tiered (grandfather-father-son) retention, so you can roll a machine back by minutes,
+  # hours, OR days without keeping hundreds of files. A snapshot is kept at full interval
+  # granularity while recent, then thinned to ~1/hour, then ~1/day, out to the max age.
+  retention:
+    recent-window-minutes: 120   # keep EVERY snapshot younger than this (0 = only tiered)
+    hourly-window-hours: 24      # older than recent, up to this age: keep ~1 per hour
+    daily-window-days: 14        # older than that, up to this age: keep ~1 per day; older is dropped
+    max-snapshots: 64            # absolute per-machine cap (safety bound on file size)
+  # max-versions: 8   # DEPRECATED (old fixed cap ≈ 80 min of history). Left unset = use retention above;
+                      # if set larger than max-snapshots it still raises the hard cap.
+
+# Ticks between render-distance recomputations (viewer set diffing).
+tracker-interval: 10
+
+# Spawner mining — let players break a spawner and collect it as a typed spawner
+# item (no SmartSpawner needed; vanilla drops nothing). Read once at enable, so a
+# change here needs a server restart.
+spawner-mining:
+  enabled: true          # master on/off for the whole feature
+  any-pickaxe: true      # true = any pickaxe (wood→netherite); false = iron+ only
+  include-natural: true  # true = dungeon/natural spawners too; false = only player-placed
+  drop-at-block: true    # true = drop on the ground; false = straight to the miner's inventory
+
+# PixelProfiler price bridge. When enabled, machines take their auto-sell / vault
+# value from PixelProfiler — overriding EconomyShopGUI and the per-machine custom
+# prices — from two sources, highest priority first:
+#   1. PixelProfiler/prices.yml — the dynamic price table (MATERIAL -> per-item price,
+#      hand-edited; also drives /shop and %pixelprofiler_price_X%).
+#   2. PixelProfiler/shops/**.yml — an item's shop sell price (trade.sell.money).
+# So one place (prices.yml) drives every machine's payout, and editing it then running
+# /pixelprofiler reload propagates here on the next refresh. No hard dependency:
+# MachineConstruct reads PixelProfiler's files from disk, so PixelProfiler doesn't need
+# a restart. If PixelProfiler isn't installed, the bridge sits idle and machines keep
+# their normal prices. An item priced in neither file also keeps its normal price.
+pixelprofiler-pricing:
+  enabled: true
+  # Folder name of the PixelProfiler plugin under plugins/ (its shops/ subfolder is read).
+  plugin-folder: "PixelProfiler"
+  # How often to re-read shop prices, in minutes.
+  refresh-minutes: 60
+
+# I/O chest linking reach, in blocks, by machine tier (index 0 = tier 1).
+# A machine can only link an input/output chest within this many blocks of its
+# anchor; the reach grows as the machine is upgraded. The last value applies to
+# any tier beyond the list. Distance never costs CPU at runtime (a chest in an
+# unloaded chunk is skipped, never force-loaded) — this is purely the link cap.
+io:
+  reach-per-tier: [16, 24, 32, 48]
+
+# Music subsystem (jukebox machine + /music). Audio plays through Simple Voice
+# Chat (soft-depend) — if SVC isn't installed, tracks still download/save but
+# play silently. Track ingest needs the same static ffmpeg + yt-dlp binaries
+# VideoWall uses; drop them in the bin-dir below (or point at VideoWall's copies).
+music:
+  # Where ffmpeg / yt-dlp live. Defaults to plugins/MachineConstruct/bin/.
+  bin-dir: ""                 # blank = <dataFolder>/bin
+  ffmpeg-path: ""             # blank = <bin-dir>/ffmpeg
+  ytdlp-path: ""              # blank = <bin-dir>/yt-dlp
+  # YouTube blocks server IPs with "Sign in to confirm you're not a bot". Fix it by
+  # exporting cookies.txt from a logged-in browser (Netscape format, e.g. the
+  # "Get cookies.txt LOCALLY" extension) and pointing here (path is relative to the
+  # plugin folder, or absolute). Strongly recommended for reliable downloads.
+  cookies-file: ""            # e.g. "cookies.txt"
+  # Extra yt-dlp args, one entry per token-group. Also useful against the bot wall:
+  #   - "--extractor-args youtube:player_client=default,web_safari,android"
+  ytdlp-extra-args: []
+  # Opus encode bitrate for saved tracks (compact library; a 4-min song ≈ 2–3 MB).
+  opus-bitrate: "96k"
+  # SVC reach (blocks) for /music play (jukeboxes use their own per-tier distance).
+  command-distance: 48.0
+  # Auto-ingest tracks on enable/reload: id → local path (relative to the data
+  # folder) or a URL. Anything not already saved is normalised into the library.
+  config-tracks: {}
+    # example_song: "https://youtu.be/dQw4w9WgXcQ"
+    # local_theme:  "music/source/theme.mp3"
+
+# Machines with `facing: player` turn toward whoever places them (snapped to 45°). If a
+# server ever finds every such model turned the wrong way, add degrees here instead of editing
+# each model (multiples of 45).
+facing-yaw-offset: 0

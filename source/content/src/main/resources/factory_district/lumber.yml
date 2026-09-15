@@ -1,0 +1,311 @@
+# Virtual Factory District — LUMBER branch (ADR 0019).
+# A third root-economy beside the Virtual Mine and Virtual Farm. Same machine, same Quantum Vault,
+# same shared worker pool. Mirrors the mine's deposit flow:
+#
+#   Virtual Lumberyard → prospects CLEARINGS (worker-scaled, the only source)
+#   Clearing           → roll a 'vigor' (richness); OPEN it into a tree PLANTATION of any species
+#   Plantation         → produces logs; its MATURITY depletes as it's cut → REPLANT with saplings
+#   Logs               → WOODWORKING (sawmill / kiln / paper mill / carpenter) via the vault
+#
+# SIGNATURE MECHANIC — deplete & replant (reuses the soil+fertilizer engine, ADR 0017):
+#   soil: { start, per-cycle, depleted-mult }   — a plantation's MATURITY; drains each cut cycle.
+#   fertilizer: { item: <species>_sapling, ... } — REPLANT: auto-pulled from the vault when maturity
+#       runs out (plantations drop their own saplings, so they're partly self-replanting; over-cut and
+#       you must supply more). At 0 maturity with no saplings, yield craters to depleted-mult.
+#   Tier-II "Old-Growth" plantations use restores-soil → they SELF-REGROW (sustainable, no replanting)
+#       as the gated reward for cutting enough of that wood.
+# Build cost / output / upgrades / requires / worker-proficiency syntax: identical to the other files.
+
+categories:
+  forestry:    { name: "Forestry",    icon: OAK_SAPLING }   # the Virtual Lumberyard (build this)
+  clearings:   { name: "Clearings",   icon: DIRT }          # produced by the Lumberyard → plant a species
+  plantations: { name: "Plantations", icon: OAK_LOG }       # planted from a clearing; never built directly
+  woodworking: { name: "Woodworking", icon: CRAFTING_TABLE } # logs → planks / charcoal / paper / furniture
+
+factories:
+
+  # ── VIRTUAL LUMBERYARD ── the root + surveyor. The ONLY source of clearings; prospects them
+  #    into empty slots (scaled by its lumberjacks). Small passive sticks/saplings.
+  virtual_lumberyard:
+    name: "Virtual Lumberyard"
+    icon: OAK_LOG
+    build:
+      blocks: [ oak_log 128, oak_planks 128, iron_axe 1, chest 4, oak_fence 32 ]
+      creatures: [ villager 1 ]
+    category: forestry
+    cycle-seconds: 120
+    workers: 2
+    output:
+      - stick 4
+      - { item: oak_sapling, amount: "1-2", chance: 0.4 }
+    generates:
+      every-seconds: 600
+      chance: 0.4
+      worker-scaled: true            # more lumberjacks → more clearings surveyed
+      count: 1
+      max: 6
+      outcomes:
+        - { farm: forest_clearing,  weight: 5 }   # common woods
+        - { farm: ancient_clearing, weight: 1 }   # rare woods (cherry / mangrove)
+
+  # ── CLEARINGS (buildable:false) — produced by the Lumberyard. Roll a vigor (richness) that carries
+  #    into the plantation. OPEN one into ANY tree species via its upgrade list. ──
+  forest_clearing:
+    name: "Forest Clearing"
+    icon: DIRT
+    category: clearings
+    buildable: false
+    tier: "Clearing"
+    cycle-seconds: 240
+    richness: { min: 0.6, max: 1.8 }
+    output: [ oak_sapling 1 ]        # a trickle of saplings while un-planted
+    upgrades:
+      - { to: oak_plantation,      name: "Plant Oak",      cost: [ oak_sapling 16, oak_fence 8 ] }
+      - { to: birch_plantation,    name: "Plant Birch",    cost: [ birch_sapling 16, oak_fence 8 ] }
+      - { to: spruce_plantation,   name: "Plant Spruce",   cost: [ spruce_sapling 16, oak_fence 8 ] }
+      - { to: acacia_plantation,   name: "Plant Acacia",   cost: [ acacia_sapling 16, oak_fence 8 ] }
+      - { to: jungle_plantation,   name: "Plant Jungle",   cost: [ jungle_sapling 16, oak_fence 8 ] }
+      - { to: dark_oak_plantation, name: "Plant Dark Oak", cost: [ dark_oak_sapling 16, oak_fence 8 ] }
+
+  ancient_clearing:
+    name: "Ancient Clearing"
+    icon: MOSS_BLOCK
+    category: clearings
+    buildable: false
+    tier: "Rare Clearing"
+    cycle-seconds: 240
+    richness: { min: 1.2, max: 2.6 }   # old soil — rich, swings big
+    output: [ oak_sapling 1 ]
+    upgrades:
+      - { to: cherry_plantation,   name: "Plant Cherry",   cost: [ cherry_sapling 12, oak_fence 8 ] }
+      - { to: mangrove_plantation, name: "Plant Mangrove", cost: [ mangrove_propagule 12, clay 16 ] }
+      - { to: dark_oak_plantation, name: "Plant Dark Oak", cost: [ dark_oak_sapling 16, oak_fence 8 ] }
+
+  # ── PLANTATIONS (buildable:false) — planted from a clearing. Maturity depletes as you cut;
+  #    auto-replants with that species' saplings from the vault (it drops its own — partly self-sustaining).
+  #    Cut enough and you can upgrade to a self-regrowing Old-Growth plantation. ──
+  oak_plantation:
+    name: "Oak Plantation"
+    icon: OAK_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }   # lumberjack skill
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }       # maturity (deplete & replant)
+    fertilizer: { item: oak_sapling, amount: 1, restores: 120 }  # replant from the vault
+    output:
+      - oak_log 6
+      - { item: oak_sapling, amount: "1-2", chance: 0.6 }
+      - { item: apple, amount: 1, chance: 0.1 }
+    demolish-refund: [ oak_log 16 ]
+    upgrades:
+      - { to: oak_old_growth, name: "Let it grow to Old-Growth (self-regrowing)",
+          cost: [ oak_log 64, oak_sapling 32, bone_meal 16 ],
+          requires-produced: { oak_log: 1500 } }
+
+  oak_old_growth:
+    name: "Old-Growth Oak"
+    icon: OAK_WOOD
+    category: plantations
+    buildable: false
+    tier: "II"
+    requires: [ virtual_lumberyard ]
+    workers: 2
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 25, bonus-per-tier: 0.2, max-tier: 4 }
+    soil: { start: 800, depleted-mult: 1.0 }   # 'start' = the regrow cap
+    restores-soil: 3                            # self-regrows — no replanting needed (the reward)
+    output:
+      - oak_log 10
+      - { item: oak_sapling, amount: "1-2", chance: 0.5 }
+      - { item: apple, amount: "1-2", chance: 0.2 }
+    demolish-refund: [ oak_log 48 ]
+
+  birch_plantation:
+    name: "Birch Plantation"
+    icon: BIRCH_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: birch_sapling, amount: 1, restores: 120 }
+    output:
+      - birch_log 6
+      - { item: birch_sapling, amount: "1-2", chance: 0.6 }
+
+  spruce_plantation:
+    name: "Spruce Plantation"
+    icon: SPRUCE_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: spruce_sapling, amount: 1, restores: 120 }
+    output:
+      - spruce_log 6
+      - { item: spruce_sapling, amount: "1-2", chance: 0.6 }
+
+  acacia_plantation:
+    name: "Acacia Plantation"
+    icon: ACACIA_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: acacia_sapling, amount: 1, restores: 120 }
+    output:
+      - acacia_log 6
+      - { item: acacia_sapling, amount: "1-2", chance: 0.6 }
+
+  jungle_plantation:
+    name: "Jungle Plantation"
+    icon: JUNGLE_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: jungle_sapling, amount: 1, restores: 120 }
+    output:
+      - jungle_log 6
+      - { item: jungle_sapling, amount: "1-2", chance: 0.6 }
+      - { item: cocoa_beans, amount: "1-3", chance: 0.3 }
+
+  dark_oak_plantation:
+    name: "Dark Oak Plantation"
+    icon: DARK_OAK_LOG
+    category: plantations
+    buildable: false
+    tier: "I"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 90
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    soil: { start: 500, per-cycle: 1, depleted-mult: 0.2 }
+    fertilizer: { item: dark_oak_sapling, amount: 1, restores: 120 }
+    output:
+      - dark_oak_log 6
+      - { item: dark_oak_sapling, amount: "1-2", chance: 0.6 }
+      - { item: apple, amount: 1, chance: 0.15 }
+
+  cherry_plantation:
+    name: "Cherry Plantation"
+    icon: CHERRY_LOG
+    category: plantations
+    buildable: false
+    tier: "Rare"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 120
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.25 }
+    fertilizer: { item: cherry_sapling, amount: 1, restores: 130 }
+    output:
+      - cherry_log 5
+      - { item: cherry_sapling, amount: 1, chance: 0.5 }
+      - { item: pink_petals, amount: "1-2", chance: 0.4 }
+    upgrades:
+      - { to: cherry_old_growth, name: "Let it grow to Old-Growth (self-regrowing)",
+          cost: [ cherry_log 64, cherry_sapling 24, bone_meal 16 ],
+          requires-produced: { cherry_log: 1200 } }
+
+  cherry_old_growth:
+    name: "Old-Growth Cherry"
+    icon: CHERRY_WOOD
+    category: plantations
+    buildable: false
+    tier: "Rare II"
+    requires: [ virtual_lumberyard ]
+    workers: 2
+    cycle-seconds: 120
+    soil: { start: 900, depleted-mult: 1.0 }
+    restores-soil: 3                             # self-regrowing
+    output:
+      - cherry_log 8
+      - { item: pink_petals, amount: "1-3", chance: 0.5 }
+      - { item: cherry_sapling, amount: 1, chance: 0.4 }
+    demolish-refund: [ cherry_log 48 ]
+
+  mangrove_plantation:
+    name: "Mangrove Plantation"
+    icon: MANGROVE_LOG
+    category: plantations
+    buildable: false
+    tier: "Rare"
+    requires: [ virtual_lumberyard ]
+    workers: 1
+    cycle-seconds: 120
+    soil: { start: 600, per-cycle: 1, depleted-mult: 0.25 }
+    fertilizer: { item: mangrove_propagule, amount: 1, restores: 130 }
+    output:
+      - mangrove_log 5
+      - { item: mangrove_propagule, amount: 1, chance: 0.5 }
+      - { item: moss_block, amount: 1, chance: 0.2 }
+
+  # ── WOODWORKING ── refine logs (pulled from the vault). The Carpenter is the multi-input showcase;
+  #    the Paper Mill crosses over with the farm's sugarcane. (Sawmill/Kiln shown for oak — clone per species.) ──
+  sawmill:
+    name: "Sawmill"
+    icon: STONECUTTER
+    category: woodworking
+    build:
+      blocks: [ smooth_stone 64, oak_planks 64, iron_ingot 8, hopper 4 ]
+    workers: 1
+    cycle-seconds: 30
+    inputs: [ oak_log 1 ]
+    output:
+      - oak_planks 4
+      - { item: stick, amount: "1-2", chance: 0.5 }
+
+  charcoal_kiln:
+    name: "Charcoal Kiln"
+    icon: CAMPFIRE
+    category: woodworking
+    build:
+      blocks: [ bricks 64, furnace 2, smooth_stone 32 ]
+    workers: 1
+    cycle-seconds: 45
+    inputs: [ oak_log 2 ]
+    output: [ charcoal 2 ]
+
+  paper_mill:
+    name: "Paper Mill"
+    icon: PAPER
+    category: woodworking
+    build:
+      blocks: [ smooth_stone 64, oak_planks 32, water_bucket 2, hopper 4 ]
+    workers: 1
+    cycle-seconds: 30
+    inputs: [ sugar_cane 3 ]          # cross-synergy: the farm's Sugarcane Field feeds this
+    output: [ paper 3 ]
+
+  carpenters_workshop:
+    name: "Carpenter's Workshop"
+    icon: CRAFTING_TABLE
+    category: woodworking
+    build:
+      blocks: [ oak_planks 128, smooth_stone 32, crafting_table 1, hopper 4 ]
+    workers: 1
+    cycle-seconds: 120
+    inputs: [ oak_planks 6, paper 3 ]   # planks + paper → furniture (multi-input)
+    output:
+      - bookshelf 1
+      - { item: chest,  amount: 1, chance: 0.4 }
+      - { item: barrel, amount: 1, chance: 0.3 }

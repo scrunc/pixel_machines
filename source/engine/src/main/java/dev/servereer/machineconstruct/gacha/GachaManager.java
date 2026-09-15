@@ -1,0 +1,526 @@
+package dev.servereer.machineconstruct.gacha;
+
+import dev.servereer.machineconstruct.core.DisplayContent;
+import dev.servereer.machineconstruct.core.ItemContent;
+import dev.servereer.machineconstruct.core.PacketDisplay;
+import dev.servereer.machineconstruct.grinder.econ.EconomyBridge;
+import dev.servereer.machineconstruct.gui.MenuSkin;
+import dev.servereer.machineconstruct.machine.CuePlayer;
+import dev.servereer.machineconstruct.machine.Machine;
+import dev.servereer.machineconstruct.machine.MachineType;
+import dev.servereer.machineconstruct.model.anim.Cue;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * Runs capsule machines (ADR 0045): charges the pull, rolls rarity (with pity) then an entry, plays
+ * the {@code pull} cue with the rolled capsule, parks the capsule in the flap for its puller, and on
+ * open (right-click, or after {@code open_after} seconds) plays {@code open}, delivers the item,
+ * records the collection and broadcasts rare drops. One series file per {@code gacha.series}.
+ */
+public final class GachaManager {
+
+    /** One pull's outcome. */
+    public record Result(GachaSeries.Entry entry, GachaSpec.Rarity rarity, boolean duplicate) { }
+
+    /** A capsule sitting in a machine's flap, waiting for its puller. */
+    public static final class Waiting {
+        public final UUID player; public final String playerName; public final List<Result> results; public final long since;
+        public boolean opening;
+        Waiting(Player p, List<Result> results) { this.player = p.getUniqueId(); this.playerName = p.getName(); this.results = results; this.since = System.currentTimeMillis(); }
+    }
+
+    /** Hooks back into the manager / menus. */
+    public interface Host {
+        MachineType typeOf(Machine m);
+        void showResults(Player p, Machine m, List<Result> results);
+        void persist(Machine m);
+        void rerender(Machine m);
+    }
+    public Host host() { return host; }
+
+    private final Plugin plugin;
+    private final CuePlayer cues;
+    private final Supplier<EconomyBridge> economy;
+    private final Host host;
+    private final File dir;
+    private final Map<String, GachaSeries> series = new HashMap<>();
+    private final Map<Machine, Waiting> waiting = new HashMap<>();
+    private final Map<Machine, Long> lastBroadcast = new HashMap<>();
+    private final Coins coins;
+    public Coins coins() { return coins; }
+    private final Random rng = new Random();
+
+    public GachaManager(Plugin plugin, CuePlayer cues, Supplier<EconomyBridge> economy, Host host) {
+        this.plugin = plugin; this.cues = cues; this.economy = economy; this.host = host;
+        this.dir = new File(plugin.getDataFolder(), "gacha");
+        this.coins = new Coins(plugin);
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, 20L);
+    }
+
+    /**
+     * The series a machine dispenses, loaded (and seeded) on first use. Plain get/put, NOT
+     * computeIfAbsent: seeding puts the series into the map and calls back into this method
+     * (importCrate → series), and a mapping function that touches its own map makes
+     * HashMap.computeIfAbsent throw ConcurrentModificationException — which used to escape through
+     * onRender → renderMachine and leave the machine invisible until a /mc reload.
+     */
+    public GachaSeries series(GachaSpec spec) {
+        GachaSeries have = series.get(spec.series());
+        if (have != null) return have;
+        GachaSeries s = new GachaSeries(dir, spec.series(), spec.title());
+        s.load();
+        series.put(spec.series(), s);
+        String seed = spec.seedCrate();
+        if (seed != null && !seed.isBlank() && !s.seeded().contains("crate:" + seed)) {   // fill from the crate the machine names — once per crate, even if the series already has pieces
+            s.seeded().add("crate:" + seed);
+            try {
+                plugin.getLogger().info("[MachineConstruct] capsule series '" + s.key() + "' — seeding from ExcellentCrates crate '" + seed + "': "
+                        + importCrate(spec, seed).replaceAll("§.", ""));
+            } catch (Throwable ex) {   // a bad crate file must never stop the machine from rendering
+                plugin.getLogger().warning("[MachineConstruct] seeding '" + s.key() + "' from crate '" + seed + "' failed: " + ex);
+            }
+            s.save();
+        }
+        return s;
+    }
+    public GachaSeries seriesByKey(String key) { return series.get(key); }
+    public java.util.Collection<GachaSeries> allSeries() { return series.values(); }
+
+    /** Re-read every series file (after Dev's Diary / hand edits). */
+    public int reload() { for (GachaSeries s : series.values()) s.load(); return series.size(); }
+
+    public Waiting waiting(Machine m) { return waiting.get(m); }
+
+    private final Map<UUID, Long> lastHint = new HashMap<>();
+
+    /** A right-click with nothing to open: tell the player how the machine works (throttled). */
+    public void hint(Player p, Machine m, MachineType t) {
+        long now = System.currentTimeMillis();
+        Long last = lastHint.get(p.getUniqueId());
+        if (last != null && now - last < 3000) return;
+        lastHint.put(p.getUniqueId(), now);
+        GachaSpec spec = t.gacha();
+        StringBuilder odds = new StringBuilder();
+        for (String rn : spec.rarityOrder()) {
+            GachaSpec.Rarity r = spec.rarity(rn);
+            if (odds.length() > 0) odds.append(" <dark_gray>· ");
+            odds.append("<").append(r.color()).append(">").append(r.label()).append(" ").append(String.format(java.util.Locale.ROOT, "%.0f", spec.percent(rn))).append("%");
+        }
+        GachaSeries.Record rec = series(spec).record(p.getUniqueId());
+        String pity = spec.pityEvery() > 0 ? " <dark_gray>· <gray>" + spec.rarity(spec.pityRarity()).label() + " guaranteed in <white>" + Math.max(1, spec.pityEvery() - rec.sinceRare) + "</white>" : "";
+        p.sendMessage(msg(t.skin(), "hint", "<gray>Turn the dial — <gold>{price}</gold> a capsule. {odds}{pity}",
+                MenuSkin.vars("price", priceText(spec, 1), "odds", odds.toString(), "pity", pity, "series", spec.title())));
+    }
+
+    /** Admin: switch the machine to the next theme (block palette), persist and re-render. */
+    public String cycleTheme(Machine m, MachineType t) {
+        List<String> names = new ArrayList<>(t.panelThemeModels().keySet());
+        if (names.isEmpty()) return null;
+        String cur = m.panel() != null && m.panel().theme() != null ? m.panel().theme() : t.panelTheme();
+        String next = names.get((Math.max(0, names.indexOf(cur)) + 1) % names.size());
+        if (m.panel() == null) m.setPanel(new dev.servereer.machineconstruct.machine.PanelData());
+        m.panel().setTheme(next);
+        host.persist(m); host.rerender(m);
+        return next;
+    }
+    public boolean busy(Machine m) { return cues.playing(m) || waiting.containsKey(m); }
+
+    /** After render: blank the cue-driven parts (capsule, halves, prize) and pin them so nothing else touches them. */
+    public void onRender(Machine m, MachineType t) {
+        GachaSpec spec = t.gacha();
+        if (spec == null) return;
+        series(spec);   // load (or seed) the series as soon as a machine of it stands in the world
+        for (String sel : spec.hidden()) for (PacketDisplay d : CuePlayer.select(m, sel)) { d.forceContent(CuePlayer.blank(d)); d.pin(); }
+        Waiting w = waiting.remove(m);
+        if (w != null) deliver(m, t, w);   // a re-render (theme / reload) eats the parked capsule — hand its items over rather than lose them
+    }
+
+    public void forget(Machine m) { waiting.remove(m); cues.forget(m); }
+
+    // --- pull ----------------------------------------------------------------------
+
+    /** Pull {@code count} capsules for {@code p} on {@code m}. Returns false (with a message) when it can't. */
+    public boolean pull(Player p, Machine m, MachineType t, int count) {
+        GachaSpec spec = t.gacha();
+        if (spec == null) return false;
+        MenuSkin sk = t.skin();
+        Waiting w = waiting.get(m);
+        if (w != null) {
+            if (w.player.equals(p.getUniqueId())) p.sendMessage(msg(sk, "open_first", "<yellow>Open your capsule first — right-click the flap."));
+            else p.sendMessage(msg(sk, "someone_waiting", "<yellow>{player}'s capsule is still in the flap.", MenuSkin.vars("player", w.playerName)));
+            return false;
+        }
+        if (cues.playing(m)) { p.sendMessage(msg(sk, "busy", "<yellow>The machine is still turning…")); return false; }
+        GachaSeries s = series(spec);
+        if (s.loot().isEmpty()) { p.sendMessage(msg(sk, "empty", "<red>This machine has nothing loaded yet.")); return false; }
+        count = Math.max(1, count);
+        if (!charge(p, spec, sk, count)) return false;
+        List<Result> results = new ArrayList<>();
+        GachaSeries.Record rec = s.record(p.getUniqueId());
+        for (int i = 0; i < count; i++) {
+            Result r = roll(spec, s, rec);
+            if (r == null) break;
+            results.add(r);
+        }
+        if (results.isEmpty()) { refund(p, spec, count); p.sendMessage(msg(sk, "empty", "<red>This machine has nothing loaded yet.")); return false; }
+        s.save();
+        Waiting nw = new Waiting(p, results);
+        waiting.put(m, nw);
+        Result first = results.get(0);
+        Cue pullCue = t.cues().get("pull");
+        Map<String, String> vars = vars(p, spec, first);
+        vars.put("count", String.valueOf(results.size()));
+        if (spec.isReels()) {
+            // a slot machine pays out at the end of its own spin — nothing to park, nothing to click
+            cues.play(m, pullCue, vars, p, () -> open(m, t, nw, p));
+        } else {
+            cues.play(m, pullCue, vars, p, () -> {
+                if (waiting.get(m) == nw) p.sendMessage(msg(sk, "landed", "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it.", vars));
+            });
+        }
+        return true;
+    }
+
+    /** Right-click on the machine while a capsule waits: the puller opens it. Returns true if handled. */
+    public boolean tryOpen(Player p, Machine m, MachineType t) {
+        if (t.gacha() != null && t.gacha().isReels()) return cues.playing(m);   // reels open themselves; a click mid-spin does nothing
+        Waiting w = waiting.get(m);
+        if (w == null || w.opening) return w != null;   // someone else's capsule sits there: nothing opens, no GUI either
+
+        if (!w.player.equals(p.getUniqueId()) && !p.hasPermission("machineconstruct.admin")) {
+            p.sendMessage(msg(t.skin(), "not_yours", "<yellow>That capsule is {player}'s.", MenuSkin.vars("player", w.playerName)));
+            return true;
+        }
+        if (cues.playing(m)) return true;   // still sliding
+        open(m, t, w, p);
+        return true;
+    }
+
+    private void open(Machine m, MachineType t, Waiting w, Player opener) {
+        w.opening = true;
+        GachaSpec spec = t.gacha();
+        Result first = w.results.get(0);
+        Map<String, String> vars = vars(opener, spec, first);
+        Map<String, DisplayContent> objects = new HashMap<>();
+        objects.put("prize", new ItemContent(first.entry().shown(), ItemContent.context("fixed")));
+        Cue reveal = t.cues().get("reveal");
+        cues.play(m, reveal != null ? reveal : t.cues().get("open"), vars, objects, opener, () -> deliver(m, t, w));
+    }
+
+    private void deliver(Machine m, MachineType t, Waiting w) {
+        if (waiting.get(m) == w) waiting.remove(m);
+        GachaSpec spec = t.gacha();
+        GachaSeries s = series(spec);
+        MenuSkin sk = t.skin();
+        Player p = plugin.getServer().getPlayer(w.player);
+        GachaSeries.Record rec = s.record(w.player);
+        Location drop = m.anchor().clone().add(0.5, 0.6, 0.5);
+        Result best = null;
+        for (Result r : w.results) {
+            GachaSeries.Entry e = r.entry();
+            boolean dup = e.once && rec.owned.contains(e.id);
+            if (dup && s.duplicateMoney() > 0 && economy.get().available() && p != null) {
+                economy.get().deposit(p, s.duplicateMoney());
+                p.sendMessage(msg(sk, "duplicate", "<gray>Already in your collection — <gold>${money}</gold> instead.", MenuSkin.vars("money", fmt(s.duplicateMoney()), "name", e.name)));
+            } else if (e.isCommand()) {
+                for (String c : e.commands) {
+                    String cmd = c.replace("{player}", w.playerName).replace("%player_name%", w.playerName).replace("%player%", w.playerName);
+                    if (cmd.startsWith("/")) cmd = cmd.substring(1);
+                    try { plugin.getServer().dispatchCommand(plugin.getServer().getConsoleSender(), cmd); }
+                    catch (Throwable ex) { plugin.getLogger().warning("[MachineConstruct] capsule reward command failed: " + cmd + " — " + ex); }
+                }
+            } else give(p, e.item(), drop);
+            if (!rec.owned.contains(e.id)) rec.owned.add(e.id);
+            rec.counts.merge(e.id, 1, Integer::sum);
+            if (best == null || spec.rank(r.rarity().name()) > spec.rank(best.rarity().name())) best = r;
+        }
+        s.save();
+        if (p != null) {
+            if (w.results.size() == 1) {
+                Result r = w.results.get(0);
+                p.sendMessage(msg(sk, "got", "<aqua>✦ <{color}>{rarity_label}</{color}> — <white>{name}</white>", vars(p, spec, r)));
+            } else host.showResults(p, m, w.results);
+        }
+        if (best != null && spec.broadcastMin() != null && spec.rank(best.rarity().name()) >= spec.rank(spec.broadcastMin())) broadcast(m, t, w, best);
+    }
+
+    private void give(Player p, ItemStack item, Location drop) {
+        if (item == null) return;
+        if (p != null && p.isOnline()) {
+            Map<Integer, ItemStack> left = p.getInventory().addItem(item);
+            for (ItemStack rest : left.values()) p.getWorld().dropItemNaturally(p.getLocation(), rest);
+        } else drop.getWorld().dropItemNaturally(drop, item);
+    }
+
+    private void broadcast(Machine m, MachineType t, Waiting w, Result best) {
+        long now = System.currentTimeMillis();
+        Long last = lastBroadcast.get(m);
+        if (last != null && now - last < 2000) return;
+        lastBroadcast.put(m, now);
+        GachaSpec spec = t.gacha();
+        Component line = msg(t.skin(), "broadcast", "<gray>{player} pulled <{color}>✦ {name}</{color}> <gray>from <white>{series}</white>!",
+                vars(null, spec, best, w.playerName));
+        Location a = m.anchor();
+        double r2 = spec.broadcastRadius() * spec.broadcastRadius();
+        for (Player o : plugin.getServer().getOnlinePlayers())
+            if (o.getWorld() == a.getWorld() && o.getLocation().distanceSquared(a) <= r2 && !o.getUniqueId().equals(w.player)) o.sendMessage(line);
+    }
+
+    /** Auto-open parked capsules after {@code open_after} seconds. */
+    private void tick() {
+        if (waiting.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (Map.Entry<Machine, Waiting> e : new ArrayList<>(waiting.entrySet())) {
+            Waiting w = e.getValue();
+            MachineType t = host.typeOf(e.getKey());
+            if (t == null || t.gacha() == null) { waiting.remove(e.getKey()); continue; }
+            if (!w.opening && !cues.playing(e.getKey()) && now - w.since > t.gacha().openAfter() * 1000L) {
+                Player p = plugin.getServer().getPlayer(w.player);
+                open(e.getKey(), t, w, p);
+            }
+        }
+    }
+
+    // --- roll ----------------------------------------------------------------------
+
+    private Result roll(GachaSpec spec, GachaSeries s, GachaSeries.Record rec) {
+        List<String> order = spec.rarityOrder();
+        if (order.isEmpty()) return null;
+        double total = 0; for (GachaSpec.Rarity r : spec.rarities().values()) total += Math.max(0, r.weight());
+        String pick = order.get(0);
+        double x = rng.nextDouble() * total;
+        for (GachaSpec.Rarity r : spec.rarities().values()) { x -= Math.max(0, r.weight()); if (x <= 0) { pick = r.name(); break; } }
+        // pity: the Nth pull without the pity rarity (or better) is forced up to it
+        if (spec.pityRarity() != null && spec.pityEvery() > 0 && rec.sinceRare + 1 >= spec.pityEvery() && spec.rank(pick) < spec.rank(spec.pityRarity()))
+            pick = spec.pityRarity();
+        GachaSeries.Entry e = s.roll(pick);
+        if (e == null) {   // nothing loaded at that rarity: step down, then up
+            int i = spec.rank(pick);
+            for (int d = i - 1; d >= 0 && e == null; d--) e = s.roll(order.get(d));
+            for (int u = i + 1; u < order.size() && e == null; u++) e = s.roll(order.get(u));
+            if (e == null) return null;
+        }
+        rec.pulls++;
+        if (spec.pityRarity() != null && spec.rank(e.rarity) >= spec.rank(spec.pityRarity())) rec.sinceRare = 0; else rec.sinceRare++;
+        return new Result(e, spec.rarity(e.rarity), e.once && rec.owned.contains(e.id));
+    }
+
+    // --- coins ---------------------------------------------------------------------
+
+    private static final String DEFAULT_COIN_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYjBhN2I5NGM0ZTU4MWI2OTkxNTlkNDg4NDZlYzA5MTM5MjUwNjIzN2M4OWE5N2M5MzI0OGEwZDhhYmM5MTZkNSJ9fX0=";
+    private org.bukkit.NamespacedKey coinKey;
+
+    /** The engine's default token — a gold-coin head tagged so nothing else matches it. */
+    public ItemStack defaultCoin() {
+        if (coinKey == null) coinKey = new org.bukkit.NamespacedKey(plugin, "coin");
+        ItemStack it = dev.servereer.machineconstruct.core.Heads.create(DEFAULT_COIN_TEXTURE);
+        org.bukkit.inventory.meta.ItemMeta meta = it.getItemMeta();
+        if (meta != null) {
+            meta.displayName(MenuSkin.mini("<!italic><gold>Capsule Token"));
+            meta.lore(MenuSkin.miniList(List.of("<!italic><gray>Feeds a capsule machine.", "<!italic><dark_gray>Turn the dial to spend it.")));
+            meta.getPersistentDataContainer().set(coinKey, org.bukkit.persistence.PersistentDataType.STRING, "default");
+            it.setItemMeta(meta);
+        }
+        return it;
+    }
+
+    /** The coin a machine takes: its series' own (set from a held item), else the ladder tier the machine names. */
+    public ItemStack coinOf(GachaSpec spec) { ItemStack c = series(spec).coin(); return c != null ? c : coins.item(spec.coinTier()); }
+    /** A series' own coin, else the ladder tier of the first machine dispensing it, else the common coin. */
+    public ItemStack coinOf(GachaSeries s) {
+        ItemStack c = s.coin(); if (c != null) return c;
+        for (Machine m : new ArrayList<>(machinesOf(s))) { MachineType t = host.typeOf(m); if (t != null && t.gacha() != null) return coins.item(t.gacha().coinTier()); }
+        return coins.item("common");
+    }
+    private java.util.List<Machine> machinesOf(GachaSeries s) {
+        java.util.List<Machine> out = new ArrayList<>();
+        for (Machine m : waiting.keySet()) { MachineType t = host.typeOf(m); if (t != null && t.gacha() != null && t.gacha().series().equals(s.key())) out.add(m); }
+        return out;
+    }
+    /** A coin by ladder tier key, or a series' coin by series key. */
+    public ItemStack coinByKey(String key) {
+        if (coins.tier(key) != null) return coins.item(key);
+        GachaSeries s = seriesByKey(key);
+        return s == null ? null : coinOf(s);
+    }
+
+    /** Is {@code it} the same coin as {@code coin}? Ladder coins by their tag (heads made at different times differ in profile id), series coins by similarity. */
+    private boolean sameCoin(ItemStack it, ItemStack coin) {
+        if (it == null || it.getType() != coin.getType()) return false;
+        String tier = coins.tierOf(coin);
+        if (tier != null) return tier.equals(coins.tierOf(it));
+        return it.isSimilar(coin);
+    }
+    private int countSimilar(Player p, ItemStack coin) {
+        int n = 0;
+        for (ItemStack it : p.getInventory().getContents()) if (sameCoin(it, coin)) n += it.getAmount();
+        return n;
+    }
+    private void removeSimilar(Player p, ItemStack coin, int amount) {
+        ItemStack[] inv = p.getInventory().getContents();
+        for (int i = 0; i < inv.length && amount > 0; i++) {
+            ItemStack it = inv[i];
+            if (!sameCoin(it, coin)) continue;
+            int take = Math.min(amount, it.getAmount());
+            it.setAmount(it.getAmount() - take); amount -= take;
+            if (it.getAmount() <= 0) p.getInventory().setItem(i, null);
+        }
+    }
+
+    /** Hand a player coins of a series (or the common coin when {@code s} is null). */
+    public void giveCoins(Player p, int amount, GachaSeries s) { giveCoinItem(p, amount, s == null ? coins.item("common") : coinOf(s)); }
+
+    public void giveCoinItem(Player p, int amount, ItemStack coin) {
+        int left = Math.max(1, amount);
+        while (left > 0) {
+            ItemStack stack = coin.clone(); int n = Math.min(left, Math.max(1, coin.getMaxStackSize())); stack.setAmount(n); left -= n;
+            for (ItemStack rest : p.getInventory().addItem(stack).values()) p.getWorld().dropItemNaturally(p.getLocation(), rest);
+        }
+    }
+
+    // --- price ---------------------------------------------------------------------
+
+    private boolean charge(Player p, GachaSpec spec, MenuSkin sk, int count) {
+        double money = spec.priceMoney() * count;
+        if (money > 0) {
+            EconomyBridge eco = economy.get();
+            if (!eco.available()) { p.sendMessage(msg(sk, "no_economy", "<red>No economy plugin — the machine can't take coins.")); return false; }
+            if (!eco.has(p, money)) { p.sendMessage(msg(sk, "cant_afford", "<red>You need <gold>${price}</gold> for that.", MenuSkin.vars("price", fmt(money)))); return false; }
+        }
+        ItemStack coin = spec.priceCoins() > 0 ? coinOf(spec) : null;
+        if (coin != null) {
+            int need = spec.priceCoins() * count;
+            if (countSimilar(p, coin) < need) {
+                p.sendMessage(msg(sk, "cant_afford_coin", "<red>You need <white>{amount}× {coin}</white> for that.", MenuSkin.vars("amount", String.valueOf(need), "coin", GachaSeries.displayName(coin))));
+                return false;
+            }
+        }
+        if (spec.priceItem() != null) {
+            int need = spec.priceAmount() * count;
+            if (!p.getInventory().containsAtLeast(new ItemStack(spec.priceItem()), need)) {
+                p.sendMessage(msg(sk, "cant_afford_item", "<red>You need <white>{amount}× {item}</white> for that.", MenuSkin.vars("amount", String.valueOf(need), "item", pretty(spec.priceItem()))));
+                return false;
+            }
+        }
+        if (money > 0 && !economy.get().withdraw(p, money)) return false;
+        if (coin != null) removeSimilar(p, coin, spec.priceCoins() * count);
+        if (spec.priceItem() != null) p.getInventory().removeItem(new ItemStack(spec.priceItem(), spec.priceAmount() * count));
+        return true;
+    }
+
+    private void refund(Player p, GachaSpec spec, int count) {
+        if (spec.priceMoney() > 0 && economy.get().available()) economy.get().deposit(p, spec.priceMoney() * count);
+        if (spec.priceCoins() > 0) giveCoins(p, spec.priceCoins() * count, series(spec));
+        if (spec.priceItem() != null) p.getInventory().addItem(new ItemStack(spec.priceItem(), spec.priceAmount() * count));
+    }
+
+    /** "1× Capsule Token" / "$250" — what a pull costs, for menus and the hint. */
+    public String priceText(GachaSpec spec, int count) {
+        List<String> parts = new ArrayList<>();
+        if (spec.priceCoins() > 0) parts.add((spec.priceCoins() * count) + "× " + GachaSeries.displayName(coinOf(spec)));
+        if (spec.priceMoney() > 0) parts.add("$" + fmt(spec.priceMoney() * count));
+        if (spec.priceItem() != null) parts.add((spec.priceAmount() * count) + "× " + pretty(spec.priceItem()));
+        return parts.isEmpty() ? "free" : String.join(" + ", parts);
+    }
+
+    // --- import from ExcellentCrates -----------------------------------------------
+
+    /**
+     * Copy an ExcellentCrates crate's rewards into a series: ITEM rewards become item entries (their
+     * SNBT re-built through the item factory), COMMAND rewards become command entries; the crate's
+     * rarity name and weight carry over (an unknown rarity name lands on the lowest tier). Existing
+     * entries with the same name are replaced. Returns a summary line.
+     */
+    public String importCrate(GachaSpec spec, String crateId) {
+        File f = new File(new File(plugin.getDataFolder().getParentFile(), "ExcellentCrates"), "crates/" + crateId + ".yml");
+        if (!f.exists()) return "§cNo crate file §f" + f.getName() + "§c in plugins/ExcellentCrates/crates/.";
+        org.bukkit.configuration.file.YamlConfiguration y = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(f);
+        org.bukkit.configuration.ConfigurationSection list = y.getConfigurationSection("Rewards.List");
+        if (list == null) return "§cThat crate has no Rewards.List.";
+        GachaSeries s = series(spec);
+        int items = 0, cmds = 0, skipped = 0;
+        for (String rid : list.getKeys(false)) {
+            org.bukkit.configuration.ConfigurationSection r = list.getConfigurationSection(rid);
+            if (r == null) continue;
+            String type = r.getString("Type", "ITEM").toUpperCase();
+            double weight = r.getDouble("Weight", 1);
+            String rarity = r.getString("Rarity", "common").toLowerCase();
+            if (!spec.rarities().containsKey(rarity)) rarity = spec.rarityOrder().isEmpty() ? "common" : spec.rarityOrder().get(0);
+            GachaSeries.Entry old = s.byName(rid);
+            if (old != null) s.removeNoSave(old.id);
+            if (type.equals("COMMAND")) {
+                List<String> cs = new ArrayList<>();
+                for (String c : r.getStringList("Commands")) cs.add(c.replace("%player_name%", "{player}").replace("%player%", "{player}"));
+                if (cs.isEmpty()) { skipped++; continue; }
+                ItemStack icon = SnbtItems.parse(r.getString("PreviewData.Data.Value"));
+                if (icon == null) icon = new ItemStack(cs.get(0).contains("eco give") || cs.get(0).contains("money") ? Material.SUNFLOWER : cs.get(0).contains("key") ? Material.TRIPWIRE_HOOK : Material.PAPER);
+                GachaSeries.Entry e = s.addCommand(rid, rarity, cs, icon);
+                e.weight = weight; cmds++;
+            } else {
+                org.bukkit.configuration.ConfigurationSection data = r.getConfigurationSection("ItemsData");
+                boolean any = false;
+                if (data != null) for (String k : data.getKeys(false)) {
+                    ItemStack it = SnbtItems.parse(data.getString(k + ".Data.Value"));
+                    if (it == null) continue;
+                    GachaSeries.Entry e = s.add(it, rarity, data.getKeys(false).size() > 1 ? rid + "_" + k : rid);
+                    e.weight = weight; any = true; items++;
+                }
+                if (!any) skipped++;
+            }
+        }
+        s.save();
+        return "§aImported §f" + items + "§a item + §f" + cmds + "§a command reward(s) from §f" + crateId + "§a into §f" + s.key() + (skipped > 0 ? " §7(" + skipped + " skipped)" : "") + "§a.";
+    }
+
+    // --- helpers -------------------------------------------------------------------
+
+    private Map<String, String> vars(Player p, GachaSpec spec, Result r) { return vars(p, spec, r, p == null ? "" : p.getName()); }
+
+    private Map<String, String> vars(Player p, GachaSpec spec, Result r, String playerName) {
+        GachaSpec.Rarity ra = r.rarity();
+        Map<String, String> v = new LinkedHashMap<>();
+        String capsule = r.entry().capsule != null && !r.entry().capsule.isBlank() ? r.entry().capsule : ra.capsule();
+        v.put("capsule", capsule); v.put("capsule_half", capsule);
+        v.put("color", ra.color()); v.put("glow_color", ra.glow() ? ra.color() : "off");
+        v.put("pitch", String.valueOf(ra.pitch())); v.put("sound", ra.sound() == null ? "" : ra.sound()); v.put("fx", ra.fx() == null ? "" : ra.fx());
+        v.put("rarity", ra.name()); v.put("rarity_label", ra.label());
+        v.put("name", r.entry().name); v.put("player", playerName); v.put("series", spec.title());
+        // slot reels: three symbols. A win is three of the rolled tier's symbol; the bottom tier lands
+        // two-and-a-neighbour, so a common pull still reads as a near miss instead of a jackpot.
+        String sym = ra.reelSymbol();
+        v.put("sym", sym); v.put("sym1", sym); v.put("sym2", sym); v.put("sym3", sym);
+        if (spec.isReels() && spec.rank(ra.name()) <= 0) {
+            List<String> order = spec.rarityOrder();
+            for (int i = 1; i < order.size(); i++) {
+                String other = spec.rarity(order.get(i)).reelSymbol();
+                if (other != null && !other.isBlank() && !other.equals(sym)) { v.put("sym3", other); break; }
+            }
+        }
+        return v;
+    }
+
+    private static Component msg(MenuSkin sk, String key, String def) { return msg(sk, key, def, null); }
+    private static Component msg(MenuSkin sk, String key, String def, Map<String, String> vars) {
+        String over = sk == null ? null : sk.msg(key, null, vars);
+        String body = over != null ? over : MenuSkin.fill(def, vars);
+        return MenuSkin.mini((sk == null ? "<gold>Capsules <dark_gray>» " : sk.prefix("<gold>Capsules <dark_gray>» ")) + body);
+    }
+
+    public static String fmt(double v) { return v == Math.floor(v) ? String.valueOf((long) v) : String.format(java.util.Locale.ROOT, "%.2f", v); }
+    public static String pretty(Material m) { String n = m.name().toLowerCase().replace('_', ' '); return Character.toUpperCase(n.charAt(0)) + n.substring(1); }
+}

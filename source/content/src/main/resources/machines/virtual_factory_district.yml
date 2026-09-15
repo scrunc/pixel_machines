@@ -1,0 +1,68 @@
+# Virtual Factory District (ADR 0013) — pick a farm, feed its build cost (blocks +
+# captured creatures), and it passively produces into the Quantum Vault on an offline
+# time-accrual clock. Build-a-station like the Trading Hall; offline like the Grinder.
+# Ships a placeholder industrial rig model — refine live with /mc reload.
+id: virtual_factory_district
+anchor: barrel
+
+# ── palette (tweak freely, then /mc reload) ──
+vars:
+  plinth: polished_deepslate    # central base box
+  trim:   cut_copper            # base cap / accents
+  body:   deepslate_tiles       # machine body
+  core:   blast_furnace         # glowing furnace core
+  gear:   lodestone             # spinning cog
+  stack:  deepslate_bricks      # smokestack pillar
+
+placer:
+  item: blast_furnace
+  name: "<dark_aqua>⚙ <gradient:#d4af37:#ff9d5c><bold>Virtual Factory District</bold></gradient> ⚙"
+  lore:
+    - "<gray>Right-click a block face to build."
+    - "<dark_gray>Break it to pick it back up (keeps everything)."
+
+# ── model: an industrial rig — plinth + furnace core + a spinning cog and a
+#    bobbing piston head, with a smokestack pillar. Footprint ≈ 2×2 around the anchor.
+model:
+  parts:
+    rig:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        base:    { block: "${plinth}", offset: [-0.70, 0.0, -0.70], scale: [1.40, 1.10, 1.40] }
+        baseCap: { block: "${trim}",   offset: [-0.80, 1.08, -0.80], scale: [1.60, 0.10, 1.60] }
+        core:    { block: "${core}",   offset: [-0.45, 1.18, -0.45], scale: [0.90, 0.90, 0.90] }
+        gear:
+          block: "${gear}"
+          offset: [-0.30, 2.10, -0.30]
+          scale: [0.60, 0.20, 0.60]
+          center: true
+          animation: { always: { spin: { axis: y, speed: 90 } } }
+        piston:
+          block: piston
+          offset: [-0.18, 1.20, -0.18]
+          scale: [0.36, 0.36, 0.36]
+          center: true
+          animation: { always: { bob: { amount: 0.35, period: 1.4 } } }
+        stack:    { block: "${stack}", offset: [0.55, 1.10, 0.55], scale: [0.34, 1.30, 0.34] }
+        stackCap: { block: "${trim}",  offset: [0.50, 2.36, 0.50], scale: [0.44, 0.16, 0.44] }
+
+# ── Factory District config ──
+factory:
+  slots: 6
+  slots-per-tier: 3          # +3 farm slots per district upgrade
+  max-tier: 0                # 0 = unbounded
+  capture-radius: 6          # creature vacuum range
+  roster-cap: 128            # captured creatures awaiting a build
+  population-workers: false  # ADR 0022: false = houses give instant workers. true = houses are CAPACITY that
+                             #   FILL with villagers from the roster (breed via a Breeder Hut / capture them);
+                             #   housed villagers become the workers, up to your housing. Opt-in.
+  vault-cap: 6912            # quantum-vault mass cap at tier 1 (~2 double chests)
+  vault-cap-per-tier: 6912
+  max-accrue-hours: 24       # cap on offline catch-up
+  upgrade: [ iron_block 8, deepslate_bricks 64, copper_block 16, redstone_block 4 ]
+
+  # ── Farm catalog lives in the factory_district/ folder (merged at load) ──
+  #   • built-in farms + categories → factory_district/builtin.yml
+  #   • admin-scanned farms         → factory_district/factory_catalog.yml  (/mc scanfarm save)
+  #   • admins can add more .yml files there too; all are merged.
+  # This file is just the machine SHELL (model + the factory: header above).

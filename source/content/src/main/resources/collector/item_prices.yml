@@ -1,0 +1,65 @@
+# Chunk Collector custom sell prices (SmartSpawner item_prices.yml format).
+# Used per the collector's economy.price_source_mode (SHOP_PRIORITY → EconomyShopGUI
+# first, these as fallback). Key = MATERIAL, value = price each. Items without an
+# entry fall back to economy.custom_prices.default_price (0 = don't sell it).
+# Seed values below cover common farm/grind drops a vacuum picks up — tune freely.
+prices:
+  # ── blocks / building (low value, high volume) ──
+  COBBLESTONE: 0.2
+  COBBLED_DEEPSLATE: 0.2
+  DIRT: 0.1
+  GRAVEL: 0.2
+  SAND: 0.2
+  NETHERRACK: 0.1
+  STONE: 0.3
+  ANDESITE: 0.2
+  DIORITE: 0.2
+  GRANITE: 0.2
+
+  # ── crops / farm output ──
+  WHEAT: 0.5
+  CARROT: 0.5
+  POTATO: 0.5
+  BEETROOT: 0.5
+  SUGAR_CANE: 0.8
+  MELON_SLICE: 0.3
+  PUMPKIN: 1.0
+  BAMBOO: 0.2
+  KELP: 0.2
+  SWEET_BERRIES: 0.5
+  NETHER_WART: 1.0
+
+  # ── wood ──
+  OAK_LOG: 1.0
+  SPRUCE_LOG: 1.0
+  BIRCH_LOG: 1.0
+  JUNGLE_LOG: 1.0
+  ACACIA_LOG: 1.0
+  DARK_OAK_LOG: 1.0
+  MANGROVE_LOG: 1.0
+  CHERRY_LOG: 1.0
+
+  # ── mob drops ──
+  ROTTEN_FLESH: 0.5
+  BONE: 2.0
+  STRING: 2.0
+  SPIDER_EYE: 4.0
+  GUNPOWDER: 5.0
+  ARROW: 1.0
+  LEATHER: 3.0
+  FEATHER: 2.0
+  SLIME_BALL: 6.0
+
+  # ── ores / ingots ──
+  COAL: 3.0
+  RAW_IRON: 6.0
+  RAW_COPPER: 4.0
+  RAW_GOLD: 10.0
+  IRON_INGOT: 15.0
+  GOLD_INGOT: 20.0
+  REDSTONE: 3.0
+  LAPIS_LAZULI: 4.0
+  DIAMOND: 60.0
+  EMERALD: 40.0
+  QUARTZ: 3.0
+  GLOWSTONE_DUST: 4.0

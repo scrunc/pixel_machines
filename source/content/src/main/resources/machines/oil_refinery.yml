@@ -1,0 +1,101 @@
+# Oil Refinery — feed it the Oil Jack's "Oil Barrel" (a named bucket) + fuel; it
+# cracks each barrel into Gasoline + Diesel that pool in the output tank (capped).
+# Take a product out (click = one, shift-click = the stack) or hit Sell All ($).
+# A fuelled recipe machine; output slots ARE the tank, `capacity:` is the cap.
+id: oil_refinery
+anchor: barrel
+capacity: 256            # tank cap — stops refining once the output holds this many items
+
+vars:
+  copper: cut_copper
+  steel:  deepslate_tiles
+  trim:   gold_block
+
+  # ── the distillation column: octagon drum + 3 bands + domed cap + vent ──
+  tower:
+    offset: [0.5, 0.3, 0.5]
+    parts:
+      drum: { block: "${copper}", offset: [-0.4, 0.0, -0.4], scale: [0.8, 2.0, 0.8], octagon: true }
+      band: { block: "${trim}",  scale: [0.92, 0.08, 0.92], octagon: true, grid: { x: [-0.46], y: [0.35, 1.0, 1.65], z: [-0.46] } }
+      cap:  { block: "${copper}", offset: [-0.3, 2.0, -0.3], scale: [0.6, 0.3, 0.6], octagon: true }
+      vent: { block: iron_bars, offset: [-0.08, 2.25, -0.08], scale: [0.16, 0.45, 0.16] }
+
+  # ── firebox at the base: glows + roars while refining, idles with a wisp of smoke ──
+  firebox:
+    offset: [0.5, 0.32, 0.0]
+    parts:
+      shell: { block: "${steel}", offset: [-0.3, 0.0, -0.2], scale: [0.6, 0.5, 0.4] }
+      mouth:
+        block: magma_block
+        offset: [-0.2, 0.05, -0.24]
+        scale:  [0.4, 0.35, 0.12]
+        animation:
+          working:
+            particle: { type: flame, offset: [0.0, 0.1, -0.12], spread: [0.15, 0.1, 0.05], count: 4, speed: 0.01, rate: 0.08 }
+            sound:    { type: block.furnace.fire_crackle, volume: 0.4, pitch: 1.0, rate: 0.8 }
+          idle:
+            particle: { type: smoke, offset: [0.0, 0.25, -0.1], count: 1, speed: 0.01, rate: 0.6 }
+
+  # ── flare stack: a little pipe with a flame that flares up while working ──
+  flare:
+    offset: [0.88, 2.0, 0.88]
+    parts:
+      pipe: { block: "${copper}", offset: [-0.06, 0.0, -0.06], scale: [0.12, 0.6, 0.12] }
+      tip:
+        block: shroomlight
+        offset: [-0.08, 0.6, -0.08]
+        scale:  [0.16, 0.16, 0.16]
+        center: true
+        animation:
+          always:  { particle: { type: small_flame, offset: [0.0, 0.1, 0.0], count: 1, speed: 0.01, rate: 0.3 } }
+          working:
+            pulse:    { axis: all, amplitude: 0.2, hz: 2.0 }
+            particle: { type: flame, offset: [0.0, 0.12, 0.0], spread: [0.05, 0.1, 0.05], count: 3, speed: 0.03, rate: 0.06 }
+
+model:
+  parts:
+    base:    { block: polished_deepslate, offset: [-0.3, 0.0, -0.3], scale: [1.6, 0.3, 1.6] }
+    rim:     { block: "${trim}", offset: [-0.32, 0.28, -0.32], scale: [1.64, 0.05, 1.64] }
+    tower:   "<tower>"
+    firebox: "<firebox>"
+    flare:   "<flare>"
+    pipes:   { block: "${copper}", scale: [0.12, 1.5, 0.12], grid: { x: [-0.05, 1.05], y: [0.35], z: [-0.05, 1.05] } }
+    inlet:   { item: "<input>", offset: [0.5, 0.95, 0.95], scale: [0.4, 0.4, 0.4], display: fixed }
+    label:   { text: "<gold>⛽ <bold>Oil Refinery", offset: [0.5, 2.85, 0.5], billboard: center }
+
+gui:
+  title: "<dark_gray>⛽ <gold><bold>OIL REFINERY</bold>"
+  layout:                  # I oil · F fuel · B burn · P progress · O tank · $ sell-all · ? recipes
+    - "#########"
+    - "#II#P#OO#"
+    - "#II#P#OO#"
+    - "#FB#?#$O#"
+    - "#########"
+  icons:
+    '#': { item: black_stained_glass_pane }
+  progress:
+    idle:    { item: gray_stained_glass_pane,   name: "<gray>Idle" }
+    working: { item: orange_stained_glass_pane, name: "<gold>Refining… <white><percent>%" }
+    blocked: { item: barrier,                   name: "<red>Tank full" }
+    no_fuel: { item: red_stained_glass_pane,    name: "<red>Out of fuel" }
+    burn:       { item: blaze_powder,            name: "<gold>Heat <white><percent>%" }
+    burn_empty: { item: gray_stained_glass_pane, name: "<dark_gray>Cold" }
+
+fuel:                      # material → seconds of burn
+  coal: 10
+  charcoal: 10
+  coal_block: 100
+  blaze_rod: 30
+  lava_bucket: 120
+
+economy:                   # powers the $ Sell-All button (Vault + custom prices)
+  price_source_mode: CUSTOM_PRIORITY
+  custom_prices: { enabled: true, file: "grinder/item_prices.yml", default_price: 1.0 }
+
+recipes:                   # one barrel → Gasoline + Diesel into the tank (no bucket back)
+  - input:
+      - { item: bucket, name: "<dark_gray>⬤ Oil Barrel", lore: [ "<gray>Pumped from the deep." ] }
+    output:
+      - { item: blaze_powder, amount: 3, name: "<gold>⛽ Gasoline" }
+      - { item: gunpowder,    amount: 1, name: "<dark_gray>⬢ Diesel" }
+    time: 100

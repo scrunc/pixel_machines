@@ -1,0 +1,69 @@
+name: machineconstruct
+license: open
+authors: [servereer]
+status: planning                 # pre-P0; see DESIGN.md for the architecture spine
+description: |
+  Packet-based factory plugin for Paper 1.21.11. A custom player-head "placer"
+  item drops a real anchor CHEST that becomes the machine's interface,
+  persistence key, chunk-load detector and teardown trigger. Around the chest a
+  configured Display-Entity structure (sent over packets, never real entities)
+  renders and animates while a data-driven recipe runs. Break the chest →
+  the whole structure tears down and returns the placer. Server owners author
+  every machine, model, recipe, GUI and message in YAML — no code.
+shape: two-plugins               # engine + content pack
+modules:
+  engine:                        # → MachineConstruct.jar  ("makes the system")
+    role: platform + public API; zero external deps; ships no concrete machines
+  content:                       # → Foundry.jar  ("makes the machines & items")
+    role: machine/item/recipe/model defs via engine API + YAML pack
+    depends: [MachineConstruct]  # our own engine only
+build:
+  system: gradle                 # Gradle 9 multi-project, Kotlin DSL, gradlew + Shadow
+  java: 21
+  command: ./gradlew shadowJar   # builds BOTH jars
+depends: none                    # engine has zero hard external deps
+shaded:                          # relocated under dev.servereer.machineconstruct.libs.*
+  - packetevents                 # packet send/track (relocated; no clash with server copy)
+  - sqlite-jdbc                  # default storage backend
+  - h2                           # optional storage backend
+optional-hooks:                  # reflective, gracefully skipped if absent
+  - GriefPrevention
+  - WorldGuard
+  - PlaceholderAPI
+references:
+  - ZNPCsPlus      # entity-tracking / packet-NPC pattern
+  - DecentHolograms # packet display pattern
+v1-scope:
+  - machine placer = custom player-head item (PDC-tagged per machine type)
+  - real anchor CHEST = interface + persistence key + chunk-load + teardown
+  - data-driven hierarchical display models with transforms + animation tracks
+  - immediate-mode reconciler (TheCymaera pattern) over the packet entity layer
+  - chest right-click → custom MachineMenu GUI; break chest → teardown + return placer
+  - placeable machines with recipe processing + tiers/upgrades
+  - pluggable storage: sqlite (default) / flat-json / h2
+out-of-scope-v1:
+  - inter-machine item transport (conveyors / pipes)   # P7
+  - energy / power grid                                # P7
+  - in-game model editor                               # stretch
+features:
+  placer-item:       custom player-head, PDC-tagged per machine type, /mc give or shop/crate
+  chest-anchor:      real chest = interface + chunk-load detect + persistence key + teardown
+  visuals:           ships no pack; vanilla blocks + player-head skins, shaped by transforms; OPTIONAL custom_model_data/item_model items render if the server has a resource pack
+  packet-displays:   block / item / text displays via packetevents, no real entities
+  immediate-mode:    RenderItem/RenderGroup reconciler (TheCymaera) → packet backend
+  tracking:          chest-driven logic presence + viewer seen-set diffing for render
+  interaction:       chest right-click → GUI; optional interaction-entity sub-part hitboxes
+  animation:         per-part function/driver-based (transform = f(clock,progress,state,tier,fuel)); preset catalog (spin/bob/pulse/progress-fill/shake/glow/swap/flash/text); procedural + keyframe; shared clock; viewer/state-gated; FX
+  parenting:         parent/child transform tree (pivots, local/world axis, inherit flags); server-side compose, flatten to per-leaf world transforms; blending + per-instance phase
+  customization:     YAML models / machines / recipes / gui / messages, hot-reloadable
+  storage:           pluggable StorageProvider (sqlite | json | h2), async, anchor-location keyed
+  protection:        owner+trusted gating, GriefPrevention/WorldGuard hooks, explosion guard
+  music:             ADR 0024 — track library (Opus/Ogg under music/tracks/ + tracks.yml), /music download<url>|add|list|play|radio|personal|disc, jukebox machine (locational SVC playback + mint custom discs bound to a track via mc:disc PDC). Needs Simple Voice Chat (soft-depend; silent if absent) + the SAME static ffmpeg + yt-dlp binaries VideoWall uses in plugins/MachineConstruct/bin/ (or music.*-path config). Audio pipeline ported from VideoWall, not shared.
+todos:
+  - P0 scaffold (gradlew, plugin.yml, loads on umbralcraft)
+  - P1 packet display layer + immediate-mode reconciler + tracking MVP
+  - P2 placer head + chest anchor + PDC + place/break lifecycle
+  - P3 model system from YAML (hierarchy + transforms), chest hidden under model
+  - P4 animation via interpolation + shared clock + FX
+  - P5 machine state + pluggable storage + first recipe
+  - P6 chest-open MachineMenu GUI (I/O + fuel + progress + tier)

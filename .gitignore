@@ -1,0 +1,12 @@
+# Gradle build outputs + caches (keep the source + the gradle-wrapper jar)
+source/.gradle/
+source/build/
+source/*/build/
+
+# IDE bin directories
+source/content/bin/
+source/engine/bin/
+bin/
+
+# Standalone large binaries
+source/yt-dlp_linux

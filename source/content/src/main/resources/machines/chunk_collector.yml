@@ -1,0 +1,158 @@
+# Chunk Collector — a vacuum-hopper machine (ADR-to-come). It sweeps DROPPED ITEMS
+# out of the chunks around it (its own chunk at Tier I, a 3×3 ring at Tier II, 5×5
+# at Tier III) into a virtual vault you collect, auto-sell, and route to OUTPUT
+# chests — reusing the grinder/factory economy machinery. Runs free (no fuel) and
+# offline-safe (only loaded chunks are swept). One funnel, one spinning intake ring.
+#
+# Authoring uses the engine's variable layer (so nothing repeats):
+#   • vars:        — values referenced as ${name} (whole-value or inline).
+#   • tiers.vars:  — per-tier overrides; the SAME model re-renders per tier.
+#   • octagon: true — auto-adds the 45°-rotated twin (an octagonal disc, once).
+# Blocks are corner-anchored: a part fills [offset, offset+scale]; centre with
+# offset = -scale/2 and center:true. Footprint is centred on the anchor (x=z=0.5).
+# Anchor is a BARRIER: invisible, blast/piston-proof. It has no block-entity, so the
+# engine persists this machine to plugins/MachineConstruct/external_machines.yml instead
+# of block PDC. Break it with SNEAK + LEFT-CLICK (barriers are unbreakable normally) —
+# that runs a grief probe so protection plugins can veto, exactly like placing does.
+id: chunk_collector
+anchor: barrier
+
+placer:
+  item: hopper
+  name: "<dark_aqua>✦ <gradient:#39d0d8:#9bf6ff><bold>Chunk Collector</bold></gradient> <dark_aqua>✦"
+  lore:
+    - "<gray>Right-click a block face to build (invisible anchor)."
+    - "<gray>Vacuums dropped items in its chunk into a sellable vault."
+    - "<gray>Only collects where you're allowed to build."
+    - "<dark_gray>Sneak + left-click to pick it back up (keeps everything)."
+
+# ── palette (Tier I defaults; overridden per tier under tiers.vars) ──
+vars:
+  dark:   polished_deepslate     # base slab · funnel mouth
+  metal:  waxed_cut_copper       # rim · funnel rings
+  stud:   copper_block           # corner studs
+  column: deepslate_tiles        # neck pillar
+  core:   prismarine             # the glowing intake core
+  rune:   sea_lantern            # orbiting intake-ring lights
+  tname:  "<dark_aqua>✦ <gradient:#39d0d8:#9bf6ff><bold>Chunk Collector</bold></gradient> <dark_aqua>✦"
+
+model:
+  parts:
+
+    # ── base disc ──
+    base:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        slab: { block: "${dark}",  offset: [-0.85, 0.0,  -0.85], scale: [1.7, 0.18, 1.7], octagon: true }
+        rim:  { block: "${metal}", offset: [-0.90, 0.16, -0.90], scale: [1.8, 0.06, 1.8], octagon: true }
+        stud_ne: { block: "${stud}", offset: [ 0.56, 0.16,  0.56], scale: [0.18, 0.14, 0.18] }
+        stud_nw: { block: "${stud}", offset: [-0.74, 0.16,  0.56], scale: [0.18, 0.14, 0.18] }
+        stud_se: { block: "${stud}", offset: [ 0.56, 0.16, -0.74], scale: [0.18, 0.14, 0.18] }
+        stud_sw: { block: "${stud}", offset: [-0.74, 0.16, -0.74], scale: [0.18, 0.14, 0.18] }
+
+    # ── intake funnel (stacked shrinking octagon rings → an inverted cone) ──
+    funnel:
+      offset: [0.5, 0.22, 0.5]
+      parts:
+        r1: { block: "${metal}", offset: [-0.70, 0.00, -0.70], scale: [1.40, 0.13, 1.40], octagon: true }
+        r2: { block: "${metal}", offset: [-0.55, 0.13, -0.55], scale: [1.10, 0.13, 1.10], octagon: true }
+        r3: { block: "${metal}", offset: [-0.40, 0.26, -0.40], scale: [0.80, 0.13, 0.80], octagon: true }
+        mouth:
+          block: "${dark}"
+          offset: [-0.28, 0.39, -0.28]
+          scale:  [0.56, 0.10, 0.56]
+          octagon: true
+          animation:
+            always: { particle: { type: portal, offset: [0.0, 0.20, 0.0], spread: [0.7, 0.10, 0.7], count: 5, speed: 0.01, rate: 0.12 } }
+
+    # ── neck pillar holding the core aloft ──
+    pillar:
+      offset: [0.5, 0.50, 0.5]
+      parts:
+        body: { block: "${column}", offset: [-0.16, 0.0, -0.16], scale: [0.32, 0.34, 0.32], octagon: true }
+        band: { block: "${metal}",  offset: [-0.18, 0.30, -0.18], scale: [0.36, 0.05, 0.36], octagon: true }
+
+    # ── ✦ THE INTAKE CORE ✦ — a pulsing orb pulling items inward ──
+    core:
+      offset: [0.5, 0.92, 0.5]
+      parts:
+        orb:
+          block: "${core}"
+          offset: [-0.17, -0.17, -0.17]
+          scale:  [0.34, 0.34, 0.34]
+          center: true
+          animation:
+            always:
+              pulse: { axis: all, amplitude: 0.12, hz: 1.2 }
+              particle: { type: glow, offset: [0.0, 0.0, 0.0], spread: [0.5, 0.5, 0.5], count: 2, speed: 0.0, rate: 0.3 }
+        glint: { block: sea_lantern, offset: [-0.05, 0.06, -0.12], scale: [0.06, 0.06, 0.06] }
+
+    # ── spinning intake ring (the suction field) ──
+    ring:
+      offset: [0.5, 0.92, 0.5]
+      animation: { always: { spin: { axis: y, speed: 42 } } }
+      parts:
+        n: { block: "${rune}", offset: [-0.05, -0.05,  0.34], scale: [0.10, 0.10, 0.10] }
+        s: { block: "${rune}", offset: [-0.05, -0.05, -0.44], scale: [0.10, 0.10, 0.10] }
+        e: { block: "${rune}", offset: [ 0.34, -0.05, -0.05], scale: [0.10, 0.10, 0.10] }
+        w: { block: "${rune}", offset: [-0.44, -0.05, -0.05], scale: [0.10, 0.10, 0.10] }
+
+    # ── floating label ──
+    label:
+      text: "${tname}"
+      offset: [0.5, 1.45, 0.5]
+      billboard: center
+
+tiers:
+  max: 3
+  upgrade: { item: NETHER_STAR, amount: 1, name: "<aqua>Intake Core" }
+  speed: [1.0, 1.0, 1.0]
+  batch: [1, 1, 1]
+  capacity: [1.0, 1.0, 1.0]
+  # Per-tier block swaps — the model re-renders with these vars merged over the base.
+  vars:
+    2:   # Reinforced — gold trims, brighter core, wider field
+      metal:  gold_block
+      stud:   diamond_block
+      core:   warped_planks
+      rune:   ochre_froglight
+      tname:  "<aqua>✦ <gradient:#9bf6ff:#fff6c0><bold>Chunk Collector ⭐II</bold></gradient> <aqua>✦"
+    3:   # Singularity — netherite + radiant core, full 5×5 pull
+      metal:  netherite_block
+      stud:   diamond_block
+      column: crying_obsidian
+      core:   sea_lantern
+      rune:   pearlescent_froglight
+      tname:  "<gold>✦ <gradient:#fff6c0:#9bf6ff><bold>Chunk Collector ⭐III</bold></gradient> <gold>✦"
+
+# ── behaviour: the vacuum + vault (parsed by ChunkCollectorSpec) ──
+chunk_collector:
+  interval: 2s                  # how often it sweeps loaded chunks for dropped items
+  radius_chunks: [0, 1, 2]      # per tier: 1×1 → 3×3 → 5×5 chunks (centred on the anchor)
+  max_per_player: 3             # how many a player may place (0 = unlimited)
+  overflow: stop                # stop = leave drops on the ground when the vault is full | waste
+  grace_ticks: 0                # skip item entities younger than this many ticks (0 = grab instantly)
+  skip_no_pickup: true          # ignore items flagged never-pickup (held/owned by another plugin)
+
+  # Grief-aware collection: only vacuum drops the OWNER is allowed to build at (per-item probe
+  # against GriefPrevention/WorldGuard/Towny/…). While the owner is offline it can't ask the
+  # claim plugin precisely, so collection PAUSES (the vault still routes + auto-sells). Set
+  # false to vacuum everything in range regardless of claims (and to keep collecting offline).
+  respect_claims: true
+
+  filter:
+    mode: all                   # all | whitelist | blacklist
+    items: []                   # materials for white/blacklist (ignored when mode = all)
+
+  cap:
+    base_items: 27648           # Tier I vault cap (total items)
+    per_tier_mult: [1.0, 2.5, 6.0]
+
+  # Sell prices for the vault (collect/sell-all + auto-sell). EconomyShopGUI first,
+  # then custom prices; default_price 0 = don't sell unconfigured items.
+  economy:
+    price_source_mode: SHOP_PRIORITY   # SHOP_ONLY | SHOP_PRIORITY | CUSTOM_ONLY | CUSTOM_PRIORITY
+    custom_prices:
+      enabled: true
+      file: "collector/item_prices.yml"
+      default_price: 0.0

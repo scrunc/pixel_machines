@@ -1,0 +1,222 @@
+# Virtual Factory District — built-in farm catalog (ADR 0014).
+# This + any admin-scanned files in this folder are MERGED at load. The machine shell
+# (model + factory: header) lives in machines/virtual_factory_district.yml.
+#   • built-in farms  → this file (factory_district/builtin.yml)
+#   • admin-scanned   → factory_district/factory_catalog.yml  (/mc scanfarm save)
+# Same layout in every file: top-level `categories:` and `factories:`.
+#
+# OUTPUT (rewards) per cycle — each entry can be:
+#   - iron_ingot 8                                      # simple: fixed item+amount, always
+#   - iron_ingot 1-2                                    # amount RANGE, always
+#   - { item: diamond, amount: 1, chance: 0.1 }         # 10% chance
+#   - { item: emerald, amount: "1-3", chance: 0.5 }     # range + chance
+#   - { mmoitem: "MATERIAL PALLADIUM", amount: 1, chance: 0.05 }   # MMOItems (needs MMOItems)
+#   - { command: "eco give %player% %amount%", amount: "5-15", chance: 0.3 }  # console cmd
+# Items/MMOItems go to the vault; commands run as console with %player%=owner, %amount%=roll.
+
+categories:
+  resource: { name: "Resource Farms", icon: IRON_INGOT }
+  mob:      { name: "Mob Farms",      icon: ZOMBIE_HEAD }
+  mines:    { name: "Mines",          icon: STONE }
+  processing: { name: "Processing",   icon: BLAST_FURNACE }   # refineries (raw ore → goods)
+  # housing categories (residences/civic/amenities/population) live in housing.yml (ADR 0018)
+  deposits: { name: "Deposits",       icon: RAW_IRON }        # produced by the Virtual Mine → open into a mine
+
+factories:
+
+  # ── IRON FARM ── the one simple built-in farm.
+  iron_farm:
+    name: "Iron Farm"
+    icon: IRON_BLOCK
+    category: resource
+    build:
+      blocks: [ cobblestone 256, iron_block 4, hopper 8, water_bucket 4, oak_trapdoor 16 ]
+      creatures: [ villager 3, zombie 1 ]
+    cycle-seconds: 120
+    output:
+      - iron_ingot 2          # renewable but modest (~60/hr); was 8/60s = ~480/hr
+      - { item: poppy, amount: 1, chance: 0.5 }
+
+  # ── ROYAL FORGE ── example of an MMOItems BUILD COST (pay Silver Coins to build it).
+  #    MMOItems are matched in your inventory/vault by their type+id, not vanilla NBT.
+  royal_forge:
+    name: "Royal Forge"
+    icon: GOLD_BLOCK
+    category: resource
+    build:
+      blocks:
+        - smooth_stone 256
+        - gold_block 8
+        - { mmoitem: "MATERIAL SILVER_COIN", amount: 32 }   # ← MMOItems build cost
+      creatures: [ villager 1 ]
+    workers: 1
+    cycle-seconds: 120
+    output:
+      - gold_ingot 4
+      - { item: emerald, amount: "1-2", chance: 0.5 }
+
+  # ── VIRTUAL MINE ── the root generator + prospector. It's the ONLY thing that produces
+  #    deposits: over time (scaled by its workers) it discovers deposit sites into empty slots.
+  #    You then OPEN each deposit into its mine. Build the Virtual Mine directly; deposits/mines
+  #    are never built from nothing.
+  virtual_mine:
+    name: "Virtual Mine"
+    icon: STONE
+    category: mines
+    build:
+      blocks: [ cobblestone 512, deepslate 128, iron_pickaxe 1, hopper 8, oak_planks 64 ]
+    cycle-seconds: 120
+    workers: 2                 # needs 2 assigned workers to run (ADR 0015)
+    output:
+      - cobblestone 32
+      - coal 6
+      - { mmoitem: "MATERIAL SILVER_COIN", amount: "1-3", chance: 0.5 }   # MMOItems → vault
+    generates:
+      every-seconds: 600     # roll once every 10 min (while the chunk is loaded)
+      chance: 0.4
+      worker-scaled: true    # more assigned workers → higher strike chance (prospecting)
+      count: 1
+      max: 6                 # up to 6 deposits discovered from one Virtual Mine
+      outcomes:
+        - { farm: iron_deposit,     weight: 4 }
+        - { farm: coal_deposit,     weight: 4 }
+        - { farm: gemstone_deposit, weight: 1 }   # rare
+
+  # ── COAL MINE ── a common child mine
+  coal_mine:
+    name: "Coal Mine"
+    icon: COAL_BLOCK
+    category: mines
+    tier: "I"
+    build:
+      blocks: [ cobblestone 256, hopper 4 ]
+    cycle-seconds: 90
+    requires: [ virtual_mine ]      # only runs if a staffed Virtual Mine exists (ADR 0015)
+    workers: 1
+    buildable: false               # only by opening a Coal Deposit (inherits its yield)
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }  # workers master it → +output
+    output-rolls: 1                 # weighted-table mode: 1 pick/cycle by ratio
+    output:
+      - { item: coal,    weight: 9, amount: "12-20" }   # ~90% of picks
+      - { item: diamond, weight: 1, amount: 1 }         # ~10% of picks
+    demolish-refund: [ cobblestone 64, coal 8 ]
+    upgrades:                       # convert-upgrade, GATED on lifetime coal produced
+      - { to: deep_coal_mine, name: "Deepen the shaft",
+          cost: [ iron_block 8, deepslate 256 ],
+          requires-produced: { coal: 2000 } }
+
+  deep_coal_mine:
+    name: "Deep Coal Mine"
+    icon: DEEPSLATE_COAL_ORE
+    category: mines
+    tier: "II"
+    build:
+      blocks: [ deepslate 256, iron_block 8, hopper 6 ]
+    cycle-seconds: 90
+    requires: [ virtual_mine ]
+    workers: 2
+    buildable: false               # only by upgrading a Coal Mine
+    worker-proficiency: { cycles-per-tier: 25, bonus-per-tier: 0.2, max-tier: 4 }
+    hazard: { chance: 0.03, repair-cost: [ oak_planks 32, iron_ingot 4 ] }   # cave-in risk
+    output-rolls: 2                 # 2 weighted picks/cycle
+    output:
+      - { item: coal,    weight: 8, amount: "16-24" }
+      - { item: diamond, weight: 1, amount: "1-2" }
+      - { item: emerald, weight: 1, amount: 1 }
+    deplete-cycles: 200             # exhausts after 200 cycles → demolish for scrap
+    scrap: [ deepslate 128, coal 32, diamond 2 ]
+    demolish-refund: [ deepslate 64 ]
+
+  # ── IRON MINE → SMELTER chain (ADR 0016 #3): raw ore → refined ingots ──
+  iron_mine:
+    name: "Iron Mine"
+    icon: RAW_IRON_BLOCK
+    category: mines
+    tier: "I"
+    build:
+      blocks: [ cobblestone 256, hopper 4 ]
+    cycle-seconds: 90
+    requires: [ virtual_mine ]
+    workers: 1
+    buildable: false               # only by opening an Iron Deposit
+    worker-proficiency: { cycles-per-tier: 20, bonus-per-tier: 0.15, max-tier: 4 }
+    output: [ raw_iron 3 ]          # raw ore → feed it to a Smelter (was 8)
+
+  iron_smelter:
+    name: "Iron Smelter"
+    icon: BLAST_FURNACE
+    category: processing
+    build:
+      blocks: [ blast_furnace 4, smooth_stone 128, hopper 6 ]
+    cycle-seconds: 45
+    workers: 1
+    inputs: [ raw_iron 4 ]          # consumes raw ore from the vault (chaining)
+    output: [ iron_ingot 4 ]        # 1:1 conversion (was 4→5, which minted free iron)
+
+  # ── DEPOSITS (ADR 0016) — the pre-step. Build a deposit (rolls a yield), then OPEN it into the
+  #    matching mine via the upgrade; the mine inherits the deposit's richness. Mines themselves
+  #    are buildable:false (only reachable by opening a deposit). ──
+  coal_deposit:
+    name: "Coal Deposit"
+    icon: COAL_ORE
+    category: deposits
+    buildable: false               # never built directly — only produced by the Virtual Mine
+    tier: "Deposit"
+    build:
+      blocks: [ cobblestone 64, hopper 1 ]
+    cycle-seconds: 180
+    richness: { min: 0.5, max: 2.0 }     # the seam's yield → carried into the mine
+    output: [ coal 2 ]                   # a trickle while un-worked
+    upgrades:
+      - { to: coal_mine, name: "Open a Coal Mine", cost: [ iron_ingot 4, hopper 4 ] }
+
+  iron_deposit:
+    name: "Iron Deposit"
+    icon: RAW_IRON_BLOCK
+    category: deposits
+    buildable: false               # never built directly — only produced by the Virtual Mine
+    tier: "Deposit"
+    build:
+      blocks: [ cobblestone 64, hopper 1 ]
+    cycle-seconds: 180
+    richness: { min: 0.5, max: 2.0 }
+    output: [ raw_iron 1 ]
+    upgrades:
+      - { to: iron_mine, name: "Open an Iron Mine", cost: [ iron_ingot 4, hopper 4 ] }
+
+  gemstone_deposit:
+    name: "Gemstone Deposit"
+    icon: AMETHYST_BLOCK
+    category: deposits
+    buildable: false               # never built directly — only produced by the Virtual Mine
+    tier: "Rare Deposit"
+    build:
+      blocks: [ deepslate 128, diamond 2, hopper 2 ]
+    cycle-seconds: 300
+    richness: { min: 1.0, max: 3.0 }     # rich gem seams swing big
+    output: [ amethyst_shard 1 ]
+    upgrades:
+      - { to: gemstone_mine, name: "Open a Gemstone Mine", cost: [ diamond 6, iron_block 4 ] }
+
+  # ── HOUSING moved to housing.yml (ADR 0018) — residences / civic / amenities / population.
+  #    The whole district draws from one shared worker pool, so all housing lives there now. ──
+
+  # ── GEMSTONE MINE ── a rare child mine: rare materials + a worthwhile demolish refund
+  gemstone_mine:
+    name: "Gemstone Mine"
+    icon: AMETHYST_CLUSTER
+    category: mines
+    tier: "Rare"
+    build:
+      blocks: [ deepslate 512, diamond 8, hopper 8 ]
+    cycle-seconds: 300
+    requires: [ virtual_mine ]
+    buildable: false               # only by opening a Gemstone Deposit
+    output:
+      - amethyst_shard 2-6                                   # range, always
+      - { item: diamond, amount: 1, chance: 0.4 }            # 40% chance
+      - { item: emerald, amount: "1-3", chance: 0.6 }        # range + chance
+      - { command: "eco give %player% %amount%", amount: "5-15", chance: 0.25 }  # rare cash bonus
+    deplete-cycles: 50                                       # rich but finite → exhausts after 50 cycles
+    scrap: [ deepslate 128, amethyst_block 4, diamond 2 ]    # demolish payout when exhausted
+    demolish-refund: [ deepslate 64, diamond 2 ]             # demolish payout while still producing

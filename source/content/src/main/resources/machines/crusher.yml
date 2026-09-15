@@ -1,0 +1,117 @@
+# Crusher — defined entirely in YAML (no Java). The engine reads this; /mc reload
+# re-reads it live. Visuals are vanilla blocks shaped by transforms.
+#
+# offset/scale/rotation are node-local; child nodes compose onto their parent
+# (so the spinning `rotor` carries its arms + hub). rotation is [Y, X, Z] degrees.
+# animation triggers: always | idle | working | blocked | no_fuel.
+#   (idle plays now; working fires once machine state exists — P5d.)
+id: crusher
+model:
+  parts:
+    housing:
+      head: "illustro_"
+      offset: [0.0, 0.0, 0.0]
+      scale:  [1.0, 0.7, 1.0]
+      animation:                       # DEMO (remove freely): cycle the head skin every 3s
+        idle:
+          swap:
+            mode: cycle
+            period: 3.0
+            frames:
+              - head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzFlZjgyMTY4MDMzN2I3ZmViNDdiZTQwNTUzNGJiMTc3OTEzNDkyNzUxMTU5Mjc4NTQ4NjM4MzNkNDEyMWRiNiJ9fX0="
+              - head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2E5M2Y1NWY1MGYwYzhhOTZjMmU4NTU2NDJlNjRkMDE3Y2JhNzFjZGE1MTVjZmFkM2Q4NTdiYzA2ZGRlMDM3ZiJ9fX0="
+              - head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzFlZjgyMTY4MDMzN2I3ZmViNDdiZTQwNTUzNGJiMTc3OTEzNDkyNzUxMTU5Mjc4NTQ4NjM4MzNkNDEyMWRiNiJ9fX0="
+    rim: 
+      block: iron_block
+      offset: [-0.12, 0.7, -0.12]
+      scale:  [1.2, 0.18, 1.2]
+    rotor:
+      offset: [0.5, 1.1, 0.5]      # block-centre, ~1 up; the spin pivot
+      animation:
+        idle:
+          spin: { axis: y, speed: 44 }
+          particle:                    # DEMO (P5c): smoke puffs from the rotor every 0.2s
+            type: smoke
+            offset: [0.0, 0.15, 0.0]
+            spread: [0.12, 0.05, 0.12]
+            count: 2
+            speed: 0.01
+            rate: 0.2
+        working:
+          spin: { axis: y, speed: 220 }            # faster while crushing (P5d)
+          particle: { type: large_smoke, count: 4, speed: 0.02, rate: 0.08 }  # heavier smoke (fires in P5d)
+          sound:    { type: block.stone.break, volume: 0.4, pitch: 0.7, rate: 0.5 }
+      parts:
+        armA:
+          block: stone
+          offset: [0.0, -0.12, -0.06]
+          scale:  [0.5, 0.12, 0.12]
+          parts:
+            hub:
+              head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2E5M2Y1NWY1MGYwYzhhOTZjMmU4NTU2NDJlNjRkMDE3Y2JhNzFjZGE1MTVjZmFkM2Q4NTdiYzA2ZGRlMDM3ZiJ9fX0="
+              offset: [0.05, 0.1, 0.05]
+              scale:  [0.5, 0.1, 0.1]
+              center: true
+              animation:
+                idle:
+                  spin: { axis: x, speed: 320 }
+                  swap:                # DEMO: random block every 0.4s (always visible)
+                    mode: random
+                    interval: 0.4
+                    frames:
+                      - block: iron_block
+                      - block: gold_block
+                      - block: diamond_block
+                      - block: redstone_block
+        armB:
+          block: copper_block
+          offset: [-0.5, -0.12, -0.12]
+          scale:  [0.5, 0.12, 0.12]
+          parts:
+            hub:
+              head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTlmMzY1OWQzMTEzNGI0ZmM5ZWM3MWYwMjBiYzVmMGMxMGNjNDMwODI4YjRjZGI2Yjc5OWZkMzRlZjIyNWViYSJ9fX0="
+              offset: [-0.05, 0.05, 0.05]
+              scale:  [0.5, 0.1, 0.1]
+              center: true
+              animation:
+                idle:    { spin: { axis: x, speed: -320 } }
+    material:                          # the item being crushed — bound to the live input
+      item: "<input>"                  # 0-hardcoded: shows whatever's loaded; AIR when empty
+      offset: [0.25, 1.25, 0.25]
+      scale:  [0.5, 0.5, 0.5]
+      display: fixed
+      animation:
+        working:                       # only while crushing: vibrate + spray sparks
+          shake:    { amplitude: 0.05, hz: 18 }
+          particle: { type: crit, spread: [0.15, 0.15, 0.15], count: 3, speed: 0.02, rate: 0.1 }
+gui:
+  title: "<dark_gray>✦ <gray><bold>CRUSHER</bold>"
+  layout:
+    - "#########"
+    - "#III.P.O#"
+    - "#III.P.O#"
+    - "#III.P.O#"
+    - "####?####"
+  icons:
+    '#': { item: gray_stained_glass_pane }
+    '.': { item: light_gray_stained_glass_pane }
+  progress:
+    idle:    { item: light_gray_stained_glass_pane, name: "<gray>Idle" }
+    working: { item: cyan_stained_glass_pane,        name: "<aqua>Crushing… <white><percent>%" }
+    blocked: { item: barrier,                        name: "<red>Output full" }
+recipes:                               # crusher = break things down (no fuel; the rotor is the mechanism)
+  - input:  [ "cobblestone 1" ]
+    output: [ "gravel 1" ]
+    time: 30
+  - input:  [ "gravel 1" ]
+    output: [ "sand 1" ]
+    time: 30
+  - input:  [ "stone 1" ]
+    output: [ "cobblestone 1" ]
+    time: 20
+  - input:  [ "blaze_rod 1" ]
+    output: [ "blaze_powder 4" ]
+    time: 40
+  - input:  [ "bone 1" ]
+    output: [ "bone_meal 4" ]
+    time: 25

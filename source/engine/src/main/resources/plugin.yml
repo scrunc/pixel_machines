@@ -1,0 +1,44 @@
+name: MachineConstruct
+version: ${version}
+main: dev.servereer.machineconstruct.MachineConstruct
+api-version: '1.21'
+authors: [servereer]
+description: Packet-based factory engine — the system (display rendering, tracking, machine runtime, storage, GUI, API). Ships no machines; content lives in Foundry.
+depend: [packetevents]
+softdepend: [GriefPrevention, WorldGuard, PlaceholderAPI, Vault, EconomyShopGUI, WorldEdit, FastAsyncWorldEdit, voicechat]
+commands:
+  mc:
+    description: MachineConstruct engine commands (give, reload, debug, scanfarm).
+    usage: /mc reload | /mc give <type> | /mc scanfarm … | /mc scancategory create … | /mc debug spawn [block]
+    aliases: [machineconstruct]
+  music:
+    description: Music library + jukebox playback (download, list, play, radio, personal, disc).
+    usage: /music list | /music download <url> <id> | /music play <id> | /music radio <id> | /music disc <id>
+permissions:
+  machineconstruct.use:
+    description: Open and use machine GUIs.
+    default: true
+  machineconstruct.place:
+    description: Place machines.
+    default: true
+  machineconstruct.break:
+    description: Break (remove) machines.
+    default: true
+  machineconstruct.give:
+    description: Use /mc give.
+    default: op
+  machineconstruct.reload:
+    description: Use /mc reload.
+    default: op
+  machineconstruct.debug:
+    description: Use /mc debug.
+    default: op
+  machineconstruct.admin:
+    description: Bypass machine owner checks.
+    default: op
+  machineconstruct.music:
+    description: Use /music (list, play, personal, stop).
+    default: true
+  machineconstruct.music.admin:
+    description: Download/remove tracks, mint discs, server radio.
+    default: op

@@ -1,0 +1,402 @@
+# Virtual Trading Hall (ADR 0011) — capture villagers, build profession stations,
+# and run a sealed, paginated trading operation. T1 ships a placeholder stall model;
+# the proper build comes later. Blocks are corner-anchored (a part fills
+# [offset, offset+scale]; centre with offset = -scale/2). Column axis x=z=0.5.
+id: virtual_trading_hall
+anchor: barrel
+
+# ── palette (tweak freely, then /mc reload) ──
+vars:
+  plinth: polished_deepslate    # central base box
+  trim:   cut_copper            # base cap / accents
+  grate:  copper_grate          # hatched platform lid
+  dial:   lodestone             # spinning gear / dial
+  gem:    emerald_block         # blinking gem
+  stone:  chiseled_deepslate    # orbiting obelisks
+
+placer:
+  item: emerald
+  name: "<dark_aqua>✦ <gradient:#33d6c0:#7fffd4><bold>Virtual Trading Hall</bold></gradient> ✦"
+  lore:
+    - "<gray>Right-click a block face to build."
+    - "<dark_gray>Break it to pick it back up (keeps everything)."
+
+# ── model: a 3×3 trading hall — big central plinth + grate platform + spinning
+#    dial + blinking diamond emerald, ringed by TWO counter-rotating pairs of
+#    obelisks (TOP pair clockwise, BOTTOM pair counter-clockwise, different clocks).
+#    Visual footprint ≈ 3×3 around the single anchor block — place with clearance.
+#    Offsets are first-pass — tweak live with /mc reload.
+model:
+  parts:
+    hall:
+      offset: [0.5, 0.0, 0.5]
+      parts:
+        base:    { block: "${plinth}", offset: [-0.80, 0.0, -0.80], scale: [1.60, 1.30, 1.60] }
+        baseCap: { block: "${trim}",   offset: [-0.90, 1.28, -0.90], scale: [1.80, 0.10, 1.80] }
+        lid:     { block: "${grate}",  offset: [-1.00, 1.40, -1.00], scale: [2.00, 0.10, 2.00] }
+        gear:
+          block: "${dial}"
+          offset: [-0.25, 1.50, -0.25]
+          scale: [0.50, 0.22, 0.50]
+          center: true
+          animation: { always: { spin: { axis: y, speed: 120 } } }
+        gem:
+          block: "${gem}"
+          offset: [-0.35, 1.95, -0.35]
+          scale: [0.70, 0.70, 0.70]
+          center: true
+          rotation: [0, 0, 45]
+          animation: { always: { pulse: { from: 0.6, to: 1.18, period: 1.1 } } }
+        ringTop:
+          offset: [0.0, 0.0, 0.0]
+          animation: { always: { spin: { axis: y, speed: 26 } } }
+          parts:
+            t1: { rotation: [45,  0, 0], parts: { ob: { block: "${stone}", offset: [-0.20, 0.55, 1.15], scale: [0.40, 2.40, 0.40], rotation: [0, -16, 0] } } }
+            t2: { rotation: [225, 0, 0], parts: { ob: { block: "${stone}", offset: [-0.20, 0.55, 1.15], scale: [0.40, 2.40, 0.40], rotation: [0, -16, 0] } } }
+        ringBot:
+          offset: [0.0, 0.0, 0.0]
+          animation: { always: { spin: { axis: y, speed: -20 } } }
+          parts:
+            b1: { rotation: [135, 0, 0], parts: { ob: { block: "${stone}", offset: [-0.20, 0.00, 1.15], scale: [0.40, 2.00, 0.40], rotation: [0, -12, 0] } } }
+            b2: { rotation: [315, 0, 0], parts: { ob: { block: "${stone}", offset: [-0.20, 0.00, 1.15], scale: [0.40, 2.00, 0.40], rotation: [0, -12, 0] } } }
+
+# ── Trading Hall config ──
+tradinghall:
+  slots: 20
+  slots-per-tier: 10        # +10 station slots per stall upgrade
+  max-tier: 0               # 0 = unbounded - upgrade as much as you want
+  capture-radius: 5         # villager vacuum range
+  roster-cap: 64            # blank villagers awaiting a station
+  vault-cap: 3456           # quantum-vault mass cap at tier 1 (limited)
+  vault-cap-per-tier: 3456  # +vault cap per upgrade
+  restock-seconds: 600      # timed restock (resets trade uses)
+  pull-from-vault: true
+  upgrade: [ emerald_block 4, bookshelf 16, oak_log 64, iron_block 4 ]
+  stock-upgrade: [ emerald 16, lapis_lazuli 8 ]   # per-trader stock boost (maxUses x(1+level))
+  professions:
+
+    # ── ARMORER (blast furnace) ── enchanted gear = random enchants + random price
+    armorer:
+      name: "Armorer"
+      vanilla: armorer
+      station: [ blast_furnace 1, iron_block 4, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "coal 15", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 4", sell: "iron_boots 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 5", sell: "iron_helmet 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 7", sell: "iron_leggings 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 9", sell: "iron_chestplate 1", maxUses: 12, xp: 2 }
+        2:
+          - { buy: "iron_ingot 4", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "chainmail_boots 1", maxUses: 12, xp: 5 }
+          - { buy: "emerald 3", sell: "chainmail_leggings 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "lava_bucket 1", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "diamond 1", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 1", sell: "chainmail_helmet 1", maxUses: 12, xp: 10 }
+          - { buy: "emerald 4", sell: "chainmail_chestplate 1", maxUses: 12, xp: 10 }
+          - { buy: "emerald 5", sell: "shield 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "emerald 6-13", sell: { item: diamond_boots, enchant: random }, maxUses: 3, xp: 15 }
+          - { buy: "emerald 11-27", sell: { item: diamond_leggings, enchant: random }, maxUses: 3, xp: 15 }
+        5:
+          - { buy: "emerald 6-13", sell: { item: diamond_helmet, enchant: random }, maxUses: 3, xp: 30 }
+          - { buy: "emerald 16-33", sell: { item: diamond_chestplate, enchant: random }, maxUses: 3, xp: 30 }
+
+    # ── BUTCHER (smoker) ──
+    butcher:
+      name: "Butcher"
+      vanilla: butcher
+      station: [ smoker 1, hay_block 4, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "chicken 14", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "porkchop 7", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "rabbit 4", sell: "emerald 1", maxUses: 16, xp: 2 }
+        2:
+          - { buy: "coal 15", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "cooked_porkchop 5", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "cooked_chicken 8", maxUses: 16, xp: 5 }
+        3:
+          - { buy: "mutton 7", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "beef 10", sell: "emerald 1", maxUses: 16, xp: 10 }
+        4:
+          - { buy: "dried_kelp_block 10", sell: "emerald 1", maxUses: 12, xp: 15 }
+          - { buy: "sweet_berries 10", sell: "emerald 1", maxUses: 16, xp: 15 }
+        5:
+          - { buy: "emerald 1", sell: "rabbit_stew 1", maxUses: 12, xp: 30 }
+
+    # ── CARTOGRAPHER (cartography table) ──
+    cartographer:
+      name: "Cartographer"
+      vanilla: cartographer
+      station: [ cartography_table 1, paper 64, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "paper 24", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 7", sell: "map 1", maxUses: 12, xp: 2 }
+        2:
+          - { buy: "glass_pane 11", sell: "emerald 1", maxUses: 16, xp: 5 }
+        3:
+          - { buy: "compass 1", sell: "emerald 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "emerald 7", sell: "item_frame 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 3", sell: "glow_item_frame 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "emerald 8", sell: "white_banner 1", maxUses: 12, xp: 30 }
+
+    # ── CLERIC (brewing stand) ──
+    cleric:
+      name: "Cleric"
+      vanilla: cleric
+      station: [ brewing_stand 1, glowstone 4, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "rotten_flesh 32", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "redstone 2", maxUses: 16, xp: 2 }
+        2:
+          - { buy: "gold_ingot 3", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "lapis_lazuli 1", maxUses: 16, xp: 5 }
+        3:
+          - { buy: "rabbit_foot 2", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 4", sell: "glowstone 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "turtle_scute 1", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "glass_bottle 9", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "emerald 5", sell: "ender_pearl 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "nether_wart 22", sell: "emerald 1", maxUses: 16, xp: 30 }
+          - { buy: "emerald 3", sell: "experience_bottle 1", maxUses: 12, xp: 30 }
+
+    # ── FARMER (composter) ──
+    farmer:
+      name: "Farmer"
+      vanilla: farmer
+      station: [ composter 1, hay_block 6, oak_planks 64, dirt 32, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "wheat 20", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "potato 26", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "carrot 22", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "beetroot 15", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "bread 6", maxUses: 16, xp: 1 }
+        2:
+          - { buy: "pumpkin 6", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "pumpkin_pie 4", maxUses: 16, xp: 1 }
+          - { buy: "emerald 1", sell: "apple 4", maxUses: 16, xp: 1 }
+        3:
+          - { buy: "melon 4", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 1", sell: "cookie 18", maxUses: 16, xp: 1 }
+        4:
+          - { buy: "emerald 1", sell: "cake 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 1", sell: "suspicious_stew 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "emerald 3", sell: "golden_carrot 3", maxUses: 12, xp: 30 }
+          - { buy: "emerald 4", sell: "glistering_melon_slice 3", maxUses: 12, xp: 30 }
+
+    # ── FISHERMAN (barrel) ──
+    fisherman:
+      name: "Fisherman"
+      vanilla: fisherman
+      station: [ barrel 1, prismarine 8, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "string 20", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "coal 10", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", buy2: "cod 6", sell: "cooked_cod 6", maxUses: 16, xp: 2 }
+          - { buy: "cod 15", sell: "emerald 1", maxUses: 16, xp: 2 }
+        2:
+          - { buy: "salmon 6", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 2", buy2: "salmon 6", sell: "cooked_salmon 6", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "campfire 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "tropical_fish 6", sell: "emerald 1", maxUses: 16, xp: 10 }
+        4:
+          - { buy: "pufferfish 4", sell: "emerald 1", maxUses: 16, xp: 15 }
+        5:
+          - { buy: "emerald 7-22", buy2: "fishing_rod 1", sell: { item: fishing_rod, enchant: random }, maxUses: 3, xp: 30 }
+
+    # ── FLETCHER (fletching table) ──
+    fletcher:
+      name: "Fletcher"
+      vanilla: fletcher
+      station: [ fletching_table 1, oak_log 32, oak_planks 64, string 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "stick 32", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "arrow 16", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", buy2: "gravel 10", sell: "flint 10", maxUses: 16, xp: 2 }
+        2:
+          - { buy: "flint 26", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 2", sell: "bow 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "string 14", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 3", sell: "crossbow 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "feather 24", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "emerald 2-7", sell: { item: bow, enchant: random }, maxUses: 3, xp: 15 }
+        5:
+          - { buy: "tripwire_hook 8", sell: "emerald 1", maxUses: 12, xp: 30 }
+          - { buy: "emerald 3-8", sell: { item: crossbow, enchant: random }, maxUses: 3, xp: 30 }
+          - { buy: "emerald 2", buy2: "arrow 5", sell: "tipped_arrow 5", maxUses: 12, xp: 30 }
+
+    # ── LEATHERWORKER (cauldron) ──
+    leatherworker:
+      name: "Leatherworker"
+      vanilla: leatherworker
+      station: [ cauldron 1, leather 16, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "leather 6", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 7", sell: "leather_leggings 1", maxUses: 12, xp: 2 }
+        2:
+          - { buy: "flint 26", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 6", sell: "leather_chestplate 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "rabbit_hide 9", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 5", sell: "leather_horse_armor 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "turtle_scute 4", sell: "emerald 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "emerald 6", sell: "saddle 1", maxUses: 12, xp: 30 }
+
+    # ── LIBRARIAN (lectern) — random enchanted books (random enchant + level + price) ──
+    librarian:
+      name: "Librarian"
+      vanilla: librarian
+      station: [ bookshelf 9, lectern 1, oak_planks 200, oak_log 30, red_bed 1 ]
+      roll-per-level: 3
+      trade_pools:
+        1:
+          - { buy: "paper 24", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "bookshelf 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 5-19", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 5 }
+          - { buy: "emerald 5-19", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 5 }
+        2:
+          - { buy: "book 4", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "lantern 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 8-24", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 10 }
+          - { buy: "emerald 8-24", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 10 }
+        3:
+          - { buy: "ink_sac 5", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 4", sell: "glass 4", maxUses: 12, xp: 10 }
+          - { buy: "emerald 12-30", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 15 }
+          - { buy: "emerald 12-30", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 15 }
+        4:
+          - { buy: "written_book 2", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "emerald 5", sell: "clock 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 4", sell: "compass 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 16-38", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 30 }
+          - { buy: "emerald 16-38", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 12, xp: 30 }
+        5:
+          - { buy: "emerald 1", sell: "name_tag 1", maxUses: 12, xp: 30 }
+          - { buy: "emerald 20-48", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 3, xp: 30 }
+          - { buy: "emerald 20-48", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 3, xp: 30 }
+          - { buy: "emerald 20-48", buy2: "book 1", sell: { item: enchanted_book, enchant: random }, maxUses: 3, xp: 30 }
+
+    # ── STONE MASON (stonecutter) ──
+    mason:
+      name: "Stone Mason"
+      vanilla: mason
+      station: [ stonecutter 1, stone_bricks 16, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "clay_ball 10", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "brick 10", maxUses: 16, xp: 2 }
+        2:
+          - { buy: "stone 20", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "chiseled_stone_bricks 4", maxUses: 16, xp: 5 }
+        3:
+          - { buy: "granite 16", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "andesite 16", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "diorite 16", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 1", sell: "polished_andesite 4", maxUses: 16, xp: 10 }
+        4:
+          - { buy: "quartz 12", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "emerald 1", sell: "white_terracotta 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 1", sell: "white_glazed_terracotta 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "emerald 1", sell: "quartz_pillar 1", maxUses: 12, xp: 30 }
+          - { buy: "emerald 1", sell: "quartz_block 1", maxUses: 12, xp: 30 }
+
+    # ── SHEPHERD (loom) ──
+    shepherd:
+      name: "Shepherd"
+      vanilla: shepherd
+      station: [ loom 1, white_wool 16, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "white_wool 18", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "shears 1", maxUses: 12, xp: 2 }
+        2:
+          - { buy: "white_dye 12", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "white_wool 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "white_carpet 4", maxUses: 16, xp: 5 }
+        3:
+          - { buy: "orange_dye 12", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 3", sell: "white_bed 1", maxUses: 12, xp: 10 }
+        4:
+          - { buy: "yellow_dye 12", sell: "emerald 1", maxUses: 16, xp: 15 }
+          - { buy: "emerald 3", sell: "white_banner 1", maxUses: 12, xp: 15 }
+        5:
+          - { buy: "emerald 3", sell: "painting 3", maxUses: 12, xp: 30 }
+
+    # ── TOOLSMITH (smithing table) ── enchanted tools = random enchants + random price
+    toolsmith:
+      name: "Toolsmith"
+      vanilla: toolsmith
+      station: [ smithing_table 1, iron_ingot 8, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "coal 15", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 1", sell: "stone_axe 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 1", sell: "stone_shovel 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 1", sell: "stone_pickaxe 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 1", sell: "stone_hoe 1", maxUses: 12, xp: 2 }
+        2:
+          - { buy: "iron_ingot 4", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "bell 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "flint 30", sell: "emerald 1", maxUses: 16, xp: 10 }
+          - { buy: "emerald 5-12", sell: { item: iron_axe, enchant: random }, maxUses: 3, xp: 10 }
+          - { buy: "emerald 6-15", sell: { item: iron_pickaxe, enchant: random }, maxUses: 3, xp: 10 }
+        4:
+          - { buy: "diamond 1", sell: "emerald 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 13-27", sell: { item: diamond_axe, enchant: random }, maxUses: 3, xp: 15 }
+        5:
+          - { buy: "emerald 17-33", sell: { item: diamond_pickaxe, enchant: random }, maxUses: 3, xp: 30 }
+          - { buy: "emerald 10-24", sell: { item: diamond_shovel, enchant: random }, maxUses: 3, xp: 30 }
+
+    # ── WEAPONSMITH (grindstone) ── enchanted weapons = random enchants + random price
+    weaponsmith:
+      name: "Weaponsmith"
+      vanilla: weaponsmith
+      station: [ grindstone 1, iron_block 2, oak_planks 64, oak_log 16, red_bed 1 ]
+      roll-per-level: 2
+      trade_pools:
+        1:
+          - { buy: "coal 15", sell: "emerald 1", maxUses: 16, xp: 2 }
+          - { buy: "emerald 3", sell: "iron_axe 1", maxUses: 12, xp: 2 }
+          - { buy: "emerald 7-21", sell: { item: iron_sword, enchant: random }, maxUses: 3, xp: 2 }
+        2:
+          - { buy: "iron_ingot 4", sell: "emerald 1", maxUses: 16, xp: 5 }
+          - { buy: "emerald 1", sell: "bell 1", maxUses: 12, xp: 5 }
+        3:
+          - { buy: "flint 24", sell: "emerald 1", maxUses: 16, xp: 10 }
+        4:
+          - { buy: "diamond 1", sell: "emerald 1", maxUses: 12, xp: 15 }
+          - { buy: "emerald 12-27", sell: { item: diamond_axe, enchant: random }, maxUses: 3, xp: 15 }
+        5:
+          - { buy: "emerald 13-31", sell: { item: diamond_sword, enchant: random }, maxUses: 3, xp: 30 }

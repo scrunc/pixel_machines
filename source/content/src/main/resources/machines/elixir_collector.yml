@@ -1,0 +1,96 @@
+# Elixir Collector — a 3×3 decorated tower. Passive, no fuel: it fills a central
+# glass canister with Elixir (pink_terracotta) up to capacity; the terracotta
+# RISES with the fill (`fill` bound to the `level` driver). Open it to collect.
+#
+# ONE authoring mechanism — the variable layer:
+#   vars:    — define a value, a block, OR a whole multi-part assembly.
+#   <name>   — drop whatever `name` is into the model (or into another part).
+#   ${name}  — same lookup, usable inline in text/values.
+#   grid:    — stamp a part at many spots (x×z product, or a list of offsets).
+# A part with `parts:` is a GROUP: its offset / rotation / animation move all of
+# its children together. Blocks are corner-anchored (offset = -scale/2 centres a
+# part). Footprint = the 3×3 centred on the anchor (x,z ∈ -1..2).
+id: elixir_collector
+capacity: 50                         # stops at 50; level = stored ÷ 50 drives the gauge
+
+vars:
+  dark:   polished_blackstone        # corner pillars
+  glow:   sea_lantern                # pillar caps
+  cu:     eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzAyODdlNzg5NmVjOThlZWQ5YWY0YmNlOTQ1ODNkMjdkNTFlYjAyODM2MzQyOTliNzRmNGIzNWMzNWY0NDVhIn19fQ==         # canister bands + pipes
+  cu2:    eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzQxMWQ0OGVlYmUzYjFhMzI3YWQ1ZmVmZTQ4Yjk4NTJmOGE0NDk5MzBjOWIyZmVkYWVlZjJkNWY3YWQyMGE2ZSJ9fX0=       # gear spokes
+  cu3:  eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjRlZTYzM2MyYmY5YzQ0MGNmZWIxNjYyNGFiNjBhOWZiZGYxODBkYzBiMDU0OGQ2MjY5NWUzOTczNjdlZWExOCJ9fX0=
+  elixir: eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzYzODdmYzI0Njg5M2Q5MmE2ZGQ5ZWExYjUyZGNkNTgxZTk5MWVlZWUyZTI2M2IyN2ZmZjFiY2YxYjE1NGViNyJ9fX0=            # the rising fill block ← change to re-skin
+
+  # ── the whole canister: glass shell + rising elixir + bands + funnel + spout ──
+  canister:
+    offset: [2, 0.2, 0.5]         # ← move this one line to move the whole tank
+    parts:
+      glass: { block: glass, offset: [-0.45, 0.3, -0.45], scale: [0.9, 1.95, 0.9] }
+      fill:
+        head:  "${elixir}"
+        offset: [-0.32, 0.35, -0.32]
+        scale:  [0.64, 1.7, 0.64]
+        animation:
+          always:  { fill: { axis: y, from: 0.02, to: 1.0, driver: level } }
+          working: { particle: { type: glow, offset: [0.32, 0.9, 0.32], count: 1, speed: 0.01, rate: 0.5 } }
+      band_low:  { head: "${cu}", offset: [-0.5, 0.1, -0.5], scale: [1.0, 0.19, 1.0] }
+      band_high: { head: "${cu}", offset: [-0.5, 2.1, -0.5], scale: [1.0, 0.16, 1.0] }
+      funnel: { head : "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjQyODc1ZjQwYjAyYTUyMzQyNjhjNjg0ZWRiOWQ4ZGRjN2VkYTIzOTI5ODRhZGFiZWFhZmEyMzU0NzA4ZGNmNiJ9fX0=", offset: [-0.4, 2.25, -0.4], scale: [0.8, 0.3, 0.8] }
+      spout:  { block: lightning_rod, offset: [-0.1, 2.55, -0.1], scale: [0.72, 0.45, 0.72] }
+
+  # ── ONE gear = its spokes + hub, combined under a single name ──
+  gear:
+    parts:
+      spoke_v: { head: "${cu2}", offset: [-0.06, -0.4, -0.06], scale: [0.12, 0.8, 0.12] }
+      spoke_h: { head: "${cu2}", offset: [-0.06, -0.06, -0.4], scale: [0.12, 0.12, 0.8] }
+      hub:     { head: eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzQxMWQ0OGVlYmUzYjFhMzI3YWQ1ZmVmZTQ4Yjk4NTJmOGE0NDk5MzBjOWIyZmVkYWVlZjJkNWY3YWQyMGE2ZSJ9fX0=, offset: [-0.14, -0.14, -0.14], scale: [0.28, 0.28, 0.28] }
+
+  # ── the whole drive. left/right are PARENTS (where + how fast they spin); each
+  #    holds a <gear> as its CHILD, so the gear turns with its parent. ──
+  gears:
+ 
+    parts:
+      left:
+        rotation: [0, 0, -90]                           # PARENT: position + spin. Its children (gear + pipe) inherit both.
+        offset: [1.9, 1.05, -0.5]
+        animation: { always: { spin: { axis: x, speed: 55 } } }
+        parts:
+          gear: "<gear>"             # the gear (spokes + hub)
+          pipe: { head: "${cu3}", offset: [0.15, -0.05, -0.05], scale: [0.65, 0.12, 0.12] }   # its rod — turns with the gear
+      right:
+        rotation: [0, 0, 90]
+        offset: [1.9, 1.05, 1.5]
+        animation: { always: { spin: { axis: x, speed: 55 } } }
+        parts:
+          gear: "<gear>"
+          pipe: { head: "${cu3}", offset: [-0.8, -0.05, -0.05], scale: [0.65, 0.12, 0.12] }
+
+model:
+  parts:
+    engine_house:
+      head: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTYwYTAwOGI4Y2IyNTRiNmJiMGYzMzAzNmViYmQ0MzRhNDA3NDFlYmMyZGM1ZDVhZWIyYWI0NjNjOGVlNzUxNSJ9fX0="
+      offset: [0.05, 0.25, -0.05]
+      scale:  [1.1, 1.1, 1.1]
+    platform:  { block: "gray_concrete", offset: [0.0, 0.0, -1.0], scale: [3.0, 0.3, 3.0] }
+    # corner pillars + glowing caps (grid = x × z product); edge struts (grid = list)
+    canister: "<canister>"           # glass + rising elixir + bands + funnel + spout
+    gears:    "<gears>"              # both gears + spinning pipes
+gui:
+  title: "<dark_gray>⚗ <light_purple><bold>ELIXIR COLLECTOR</bold>"
+  layout:                            # P cycle progress · O output (collect here) · ? book
+    - "#########"
+    - "#?#P#OOO#"
+    - "###P#OOO#"
+    - "#########"
+  icons:
+    '#': { item: magenta_stained_glass_pane }
+  progress:
+    idle:    { item: purple_stained_glass_pane,      name: "<light_purple>Collecting" }
+    working: { item: magenta_stained_glass_pane,     name: "<light_purple>Collecting… <white><percent>%" }
+    blocked: { item: pink_stained_glass_pane,        name: "<light_purple>Full — collect it!" }
+recipes:                             # no input, no fuel → 1 elixir every 3s up to capacity
+  - output:
+      - item: pink_terracotta
+        amount: 1
+        name: "<light_purple>⚗ Elixir"
+    time: 60

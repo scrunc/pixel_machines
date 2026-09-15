@@ -1,0 +1,73 @@
+# Virtual Factory District — crafting layer (ADR 0021).
+# Merged at load with the rest of factory_district/*.yml. A farm becomes a CRAFTER when it
+# declares either `recipes:` (a recipe processor) or `crafts: vanilla` (a workbench station).
+# Crafters short-circuit normal `output:` generation — declare one or the other, not both.
+#
+# RECIPE PROCESSOR (`recipes:`) — consumes inputs FROM THE VAULT, produces outputs TO THE VAULT.
+#   recipes:
+#     <id>:
+#       display: "Bronze Alloy"            # shown in the recipe-picker GUI
+#       in:  { copper_ingot: 2, iron_ingot: 1 }   # pulled from the vault each cycle
+#       out: { gold_ingot: 1, gunpowder: 1 }      # product + byproduct ("slag") → vault
+#   Runs on `cycle-seconds`, gated by input availability (no inputs in vault → idles, no penalty).
+#   Output scales by the same effective-yield multiplier farms use (richness × proficiency +
+#   mergeBonus) × district boost.
+#
+# STACK-MODE (`stack-mode:`) — what a fused (★, see ADR 0020) machine does:
+#   rate  (default) → runs ONE selected recipe; ★ makes it run FASTER.
+#   multi           → runs UP TO ★-count recipes AT ONCE (★1 = 1, ★2 = 2, …).
+#   Players pick recipes in the farm's "Select recipe" GUI; with none picked it auto-runs the first N.
+#
+# VANILLA BENCH (`crafts: vanilla`) — opens a real workbench window; the player crafts any vanilla
+#   recipe from the items they're carrying. A portable crafting station (not vault automation).
+
+categories:
+  processing: { name: "Processing", icon: BLAST_FURNACE }   # re-declared (merge is idempotent)
+
+factories:
+
+  # ── SMELTERY ── single-recipe processor. Fuse two (★) and it smelts FASTER (stack-mode: rate).
+  smeltery:
+    name: "Smeltery"
+    icon: BLAST_FURNACE
+    category: processing
+    build:
+      blocks: [ smooth_stone 128, furnace 4, iron_ingot 8 ]
+      creatures: [ villager 1 ]
+    workers: 1
+    cycle-seconds: 30
+    stack-mode: rate
+    recipes:
+      bronze:
+        display: "Bronze Alloy"
+        in:  { copper_ingot: 2, iron_ingot: 1 }
+        out: { gold_ingot: 1, gunpowder: 1 }     # product + slag byproduct
+      glass:
+        display: "Melt Sand → Glass"
+        in:  { sand: 4 }
+        out: { glass: 4 }
+
+  # ── WORKSHOP ── multi-recipe processor. Fuse to ★N and it runs N recipes at once (stack-mode: multi).
+  workshop:
+    name: "Workshop"
+    icon: CRAFTING_TABLE
+    category: processing
+    build:
+      blocks: [ oak_planks 128, crafting_table 1, iron_ingot 4 ]
+      creatures: [ villager 1 ]
+    workers: 1
+    cycle-seconds: 30
+    stack-mode: multi
+    recipes:
+      sticks:  { display: "Sticks",  in: { oak_planks: 2 },          out: { stick: 4 } }
+      torches: { display: "Torches", in: { coal: 1, stick: 1 },      out: { torch: 4 } }
+      paper:   { display: "Paper",   in: { sugar_cane: 3 },          out: { paper: 3 } }
+
+  # ── CRAFTING STATION ── a portable vanilla workbench (crafts: vanilla). No recipes/cycle.
+  crafting_station:
+    name: "Crafting Station"
+    icon: CRAFTING_TABLE
+    category: processing
+    build:
+      blocks: [ oak_planks 64, crafting_table 1 ]
+    crafts: vanilla
