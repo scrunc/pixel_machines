@@ -134,7 +134,7 @@ public final class GachaManager {
             odds.append("<").append(r.color()).append(">").append(r.label()).append(" ").append(String.format(java.util.Locale.ROOT, "%.0f", spec.percent(rn))).append("%");
         }
         GachaSeries.Record rec = series(spec).record(p.getUniqueId());
-        String pity = spec.pityEvery() > 0 ? " <dark_gray>· <gray>" + spec.rarity(spec.pityRarity()).label() + " guaranteed in <white>" + Math.max(1, spec.pityEvery() - rec.sinceRare) + "</white>" : "";
+        String pity = spec.pity().isEmpty() ? "" : " <dark_gray>· <gray>guaranteed: " + pityLine(spec, rec);
         p.sendMessage(msg(t.skin(), "hint", "<gray>Turn the dial — <gold>{price}</gold> a capsule. {odds}{pity}",
                 MenuSkin.vars("price", priceText(spec, 1), "odds", odds.toString(), "pity", pity, "series", spec.title())));
     }
@@ -317,9 +317,13 @@ public final class GachaManager {
         String pick = order.get(0);
         double x = rng.nextDouble() * total;
         for (GachaSpec.Rarity r : spec.rarities().values()) { x -= Math.max(0, r.weight()); if (x <= 0) { pick = r.name(); break; } }
-        // pity: the Nth pull without the pity rarity (or better) is forced up to it
-        if (spec.pityRarity() != null && spec.pityEvery() > 0 && rec.sinceRare + 1 >= spec.pityEvery() && spec.rank(pick) < spec.rank(spec.pityRarity()))
-            pick = spec.pityRarity();
+        // Guarantees: a machine may carry several ("rare every 10, mythic every 100"). Each keeps its own
+        // counter; when one comes due it forces the roll up, and the steepest tier due wins.
+        for (GachaSpec.Pity rule : spec.pity()) {
+            if (!spec.rarities().containsKey(rule.rarity())) continue;
+            if (counter(rec, spec, rule) + 1 < rule.every()) continue;
+            if (spec.rank(pick) < spec.rank(rule.rarity())) pick = rule.rarity();
+        }
         GachaSeries.Entry e = s.roll(pick);
         if (e == null) {   // nothing loaded at that rarity: step down, then up
             int i = spec.rank(pick);
@@ -328,7 +332,13 @@ public final class GachaManager {
             if (e == null) return null;
         }
         rec.pulls++;
-        if (spec.pityRarity() != null && spec.rank(e.rarity) >= spec.rank(spec.pityRarity())) rec.sinceRare = 0; else rec.sinceRare++;
+        // a pull resets every guarantee at or below the tier it landed on, and ticks the rest up
+        for (GachaSpec.Pity rule : spec.pity()) {
+            if (spec.rank(e.rarity) >= spec.rank(rule.rarity())) rec.since.put(rule.rarity(), 0);
+            else rec.since.put(rule.rarity(), counter(rec, spec, rule) + 1);
+        }
+        GachaSpec.Pity soft = spec.softestPity();
+        rec.sinceRare = soft == null ? 0 : counter(rec, spec, soft);   // kept so older builds still read the file
         return new Result(e, spec.rarity(e.rarity), e.once && rec.owned.contains(e.id));
     }
 
@@ -403,6 +413,29 @@ public final class GachaManager {
             ItemStack stack = coin.clone(); int n = Math.min(left, Math.max(1, coin.getMaxStackSize())); stack.setAmount(n); left -= n;
             for (ItemStack rest : p.getInventory().addItem(stack).values()) p.getWorld().dropItemNaturally(p.getLocation(), rest);
         }
+    }
+
+    /** How many pulls this player has gone without that tier — migrating the old single counter once. */
+    public static int counter(GachaSeries.Record rec, GachaSpec spec, GachaSpec.Pity rule) {
+        Integer v = rec.since.get(rule.rarity());
+        if (v != null) return v;
+        GachaSpec.Pity soft = spec.softestPity();
+        int seed = soft != null && soft.rarity().equals(rule.rarity()) ? rec.sinceRare : 0;
+        rec.since.put(rule.rarity(), seed);
+        return seed;
+    }
+
+    /** "Rare in 3 · Mythic in 64" — what every guarantee owes this player right now. */
+    public String pityLine(GachaSpec spec, GachaSeries.Record rec) {
+        StringBuilder sb = new StringBuilder();
+        for (GachaSpec.Pity rule : spec.pity()) {
+            GachaSpec.Rarity ra = spec.rarity(rule.rarity());
+            if (ra == null) continue;
+            if (sb.length() > 0) sb.append(" <dark_gray>· ");
+            sb.append("<").append(ra.color()).append(">").append(ra.label()).append(" <white>in ")
+              .append(Math.max(1, rule.every() - counter(rec, spec, rule)));
+        }
+        return sb.toString();
     }
 
     // --- price ---------------------------------------------------------------------

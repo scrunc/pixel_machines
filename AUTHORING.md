@@ -251,6 +251,21 @@ Add; NBT/components kept bit-for-bit) into `plugins/MachineConstruct/gacha/<seri
 rarity / weight / `once` (collectible → duplicates pay `duplicate_money`) / per-piece capsule texture
 are edited there, in the admin view, or in Dev's Diary → MachineConstruct → Capsules;
 `/mc gacha reload` re-reads. Rarity is rolled first (pity forces the floor), the theatre plays after.
+**Guarantees (`pity:`)** — one rule or a LADDER, on any coin machine:
+
+```yaml
+pity:                              # each rule keeps its own counter, per player per series
+  - { rarity: rare,      every: 10 }
+  - { rarity: epic,      every: 30 }
+  - { rarity: legendary, every: 75 }
+  - { rarity: mythic,    every: 150 }
+```
+
+A pull that comes up short is forced to the steepest tier that has come due; landing on a tier resets
+every guarantee at or below it and ticks the rest up. The old single form (`pity: { rarity, every }`)
+still works, and old files keep their counter (it migrates into the ladder on the next pull). The
+odds screen lists what each guarantee owes that player right now.
+
 **Coins**: the engine ships a ten-tier coin ladder (`plugins/MachineConstruct/coins.yml`: common …
 leviathan, each a tagged coin head — rename / recolour / retexture there). `price: { coins: 1, coin:
 rare }` charges that tier; `/mc coin give <player> <n> <tier>` pays them out (quests, votes, kits);
@@ -313,9 +328,10 @@ claw:
   travel: [0.62, 0.34]    # how far the claw may run from centre, x and z
   top: 2.08               # the gantry; floor: how deep it dives; cable: parked length
   chute: [-0.66, -0.20]   # where it lets go; tray: [x, y, z] where a won prize lands
-  grab_chance: 0.20
-  miss_chance: 0.08
-  pity_grabs: 6
+  grab_chance: 0.20       # the prongs close on a prize
+  miss_chance: 0.08       # ...or on nothing, if the aim was off
+  slip_chance: 0.25       # and this many grabs lose it again on the way (so a play is worth grab x (1 - slip))
+  pity_grabs: 6           # failures in a row before the claw is made to hold (a guaranteed play never slips)
   fail_modes: { miss: 40, slip_early: 35, slip_late: 25 }
 ```
 

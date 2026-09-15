@@ -161,9 +161,18 @@ public final class GachaMenus implements Listener {
                             List.of("<gray>Chance: <white>" + String.format(java.util.Locale.ROOT, "%.1f", spec.percent(rn)) + "%", "<gray>Pieces: <white>" + pieces), v));
                     slot += 2; if (slot % 9 == 8) slot += 3;
                 }
-                inv.setItem(sk.slot(viewKey, "pity", 31), sk.item("gacha_pity", Material.CLOCK, "<aqua>Pity",
-                        spec.pityEvery() > 0 ? List.of("<gray>A <white>{pity_rarity}</white> or better is guaranteed", "<gray>every <white>" + spec.pityEvery() + "</white> pulls.", "<gray>Yours: next in <white>{pity}")
-                                : List.of("<dark_gray>No pity rule on this machine."), v));
+                List<String> pl = new ArrayList<>();
+                if (spec.pity().isEmpty()) pl.add("<dark_gray>No guarantees on this machine.");
+                else {
+                    pl.add("<gray>However the dice fall, these are owed:");
+                    for (GachaSpec.Pity rule : spec.pity()) {
+                        GachaSpec.Rarity ra = spec.rarity(rule.rarity());
+                        if (ra == null) continue;
+                        pl.add("<" + ra.color() + ">" + ra.label() + " <gray>or better every <white>" + rule.every() + "</white> pulls"
+                                + " <dark_gray>(yours in " + Math.max(1, rule.every() - GachaManager.counter(rec, spec, rule)) + ")");
+                    }
+                }
+                inv.setItem(sk.slot(viewKey, "pity", 31), sk.item("gacha_pity", Material.CLOCK, "<aqua>Guarantees", pl, v));
                 inv.setItem(sk.slot(viewKey, "back", 45), sk.item("back", Material.BARRIER, "<red>◀ Back", List.of(), v));
             }
             case RESULT -> {

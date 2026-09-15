@@ -48,7 +48,8 @@ public final class GachaSeries {
     /** A player's record in this series. */
     public static final class Record {
         public int pulls;            // total pulls
-        public int sinceRare;        // pulls since the pity rarity (or better) last dropped
+        public int sinceRare;        // legacy single-rule counter, migrated into `since` on the next roll
+        public final Map<String, Integer> since = new HashMap<>();   // rarity → pulls since that tier or better
         public int sinceGrab;        // claw machines: failed plays in a row (pity_grabs forces the next one)
         public final List<String> owned = new ArrayList<>();   // entry ids owned (once pieces + anything pulled)
         public final Map<String, Integer> counts = new HashMap<>();   // entry id → times pulled
@@ -172,6 +173,10 @@ public final class GachaSeries {
             ConfigurationSection one = ps.createSection(pe.getKey().toString());
             one.set("pulls", pe.getValue().pulls); one.set("since_rare", pe.getValue().sinceRare);
             if (pe.getValue().sinceGrab > 0) one.set("since_grab", pe.getValue().sinceGrab);
+            if (!pe.getValue().since.isEmpty()) {
+                ConfigurationSection cs2 = one.createSection("since");
+                for (Map.Entry<String, Integer> c : pe.getValue().since.entrySet()) cs2.set(c.getKey(), c.getValue());
+            }
             one.set("owned", new ArrayList<>(pe.getValue().owned));
             ConfigurationSection cs = one.createSection("counts");
             for (Map.Entry<String, Integer> c : pe.getValue().counts.entrySet()) cs.set(c.getKey(), c.getValue());
@@ -224,6 +229,8 @@ public final class GachaSeries {
                 r.owned.addAll(one.getStringList("owned"));
                 ConfigurationSection cs = one.getConfigurationSection("counts");
                 if (cs != null) for (String id : cs.getKeys(false)) r.counts.put(id, cs.getInt(id));
+                ConfigurationSection sn = one.getConfigurationSection("since");
+                if (sn != null) for (String tier : sn.getKeys(false)) r.since.put(tier, sn.getInt(tier));
                 players.put(UUID.fromString(k), r);
             } catch (IllegalArgumentException ignored) { }
         }

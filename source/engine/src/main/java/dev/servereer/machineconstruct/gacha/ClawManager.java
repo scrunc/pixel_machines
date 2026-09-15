@@ -105,7 +105,7 @@ public final class ClawManager implements Listener {
         if (ss.claw.control() == ClawSpec.Control.STICK) seat(ss, p);
         p.sendMessage(GachaManager.msg(sk, "claw_start",
                 "<aqua>WASD moves the claw <dark_gray>·<aqua> Space or click drops it. <gray>It holds about {pct} times in 100.",
-                MenuSkin.vars("pct", String.valueOf(Math.round(ss.claw.grabChance() * 100)))));
+                MenuSkin.vars("pct", String.valueOf(Math.round(ss.claw.holdChance() * 100)))));
         sound(ss, "block.copper_bulb.turn_on", 0.7f, 1.3f);
         return true;
     }
@@ -328,7 +328,11 @@ public final class ClawManager implements Listener {
         GachaSeries s = gacha.series(ss.spec);
         GachaSeries.Record rec = s.record(ss.player);
         boolean pity = c.pityGrabs() > 0 && rec.sinceGrab + 1 >= c.pityGrabs();
-        ss.grabbed = pity || rng.nextDouble() < chance;
+        boolean held = rng.nextDouble() < chance;
+        // It closed on the prize — but holding it all the way to the chute is a second roll. A guaranteed
+        // play (pity) never slips, or the guarantee would be a lie.
+        boolean slipped = held && !pity && rng.nextDouble() < c.slipChance();
+        ss.grabbed = pity || (held && !slipped);
         if (ss.grabbed) {
             rec.sinceGrab = 0;
             ss.prize = gacha.rollFor(ss.spec, s, rec);
@@ -336,7 +340,8 @@ public final class ClawManager implements Listener {
         }
         if (!ss.grabbed) {
             rec.sinceGrab++;
-            ss.failMode = pickFail(c, onPrize);
+            // a slip is a slip: it had the thing, so it can only lose it on the way, never "close on nothing"
+            ss.failMode = slipped ? pickSlip(c) : pickFail(c, onPrize);
         }
         s.save();
     }
@@ -348,6 +353,14 @@ public final class ClawManager implements Listener {
         double x = rng.nextDouble() * total;
         for (Map.Entry<String, Double> e : c.failModes().entrySet()) { x -= Math.max(0, e.getValue()); if (x <= 0) return e.getKey(); }
         return "miss";
+    }
+
+    /** Which kind of slip — early, or the cruel one over the chute. */
+    private String pickSlip(ClawSpec c) {
+        double early = Math.max(0, c.failModes().getOrDefault("slip_early", 1.0));
+        double late = Math.max(0, c.failModes().getOrDefault("slip_late", 1.0));
+        if (early + late <= 0) return "slip_early";
+        return rng.nextDouble() * (early + late) < early ? "slip_early" : "slip_late";
     }
 
     /** It had it, and lost it: the prongs sag, the prize falls back into the pile. */

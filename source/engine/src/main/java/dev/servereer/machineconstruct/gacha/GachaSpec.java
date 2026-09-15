@@ -40,6 +40,13 @@ public final class GachaSpec {
         public String reelSymbol() { return symbol == null || symbol.isBlank() ? capsule : symbol; }
     }
 
+    /**
+     * One guarantee: "a {@code rarity} or better at least every {@code every} pulls". A machine may carry
+     * several — a soft floor every ten pulls and a headline tier every hundred, say — and each keeps its
+     * own counter per player, reset whenever a pull lands on that tier or above.
+     */
+    public record Pity(String rarity, int every) { }
+
     /** How a machine performs a pull: a capsule that parks in a tray, or reels that spin and pay out at once. */
     public enum Style { CAPSULE, REELS, CLAW }
 
@@ -48,7 +55,7 @@ public final class GachaSpec {
     private final double priceMoney;
     private final int priceCoins; private final String coinTier;
     private final Material priceItem; private final int priceAmount;
-    private final String pityRarity; private final int pityEvery;
+    private final List<Pity> pity;
     private final int multi;
     private final int openAfter;
     private final String broadcastMin; private final double broadcastRadius;
@@ -57,11 +64,11 @@ public final class GachaSpec {
     private final String seedCrate;   // gacha.seed_crate — an ExcellentCrates crate id whose rewards fill the series once
     private final Map<String, Rarity> rarities;
 
-    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, String pityRarity, int pityEvery,
+    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity,
                       int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate, ClawSpec claw) {
         this.seedCrate = seedCrate; this.claw = claw;
         this.series = series; this.title = title; this.style = style; this.priceMoney = priceMoney; this.priceCoins = priceCoins; this.coinTier = coinTier; this.priceItem = priceItem; this.priceAmount = priceAmount;
-        this.pityRarity = pityRarity; this.pityEvery = pityEvery; this.multi = multi; this.openAfter = openAfter;
+        this.pity = pity; this.multi = multi; this.openAfter = openAfter;
         this.broadcastMin = broadcastMin; this.broadcastRadius = broadcastRadius;
         this.hidden = Collections.unmodifiableList(hidden); this.rarities = Collections.unmodifiableMap(rarities);
     }
@@ -80,9 +87,16 @@ public final class GachaSpec {
             item = Material.matchMaterial(price.getString("item", "").trim().toUpperCase().replace("MINECRAFT:", ""));
             amount = Math.max(1, price.getInt("amount", 1));
         }
-        ConfigurationSection pity = sec.getConfigurationSection("pity");
-        String pityR = pity == null ? null : pity.getString("rarity");
-        int pityN = pity == null ? 0 : pity.getInt("every", 0);
+        // pity: one rule (a map) or a ladder (a list of them)
+        List<Pity> pity = new ArrayList<>();
+        ConfigurationSection pitySec = sec.getConfigurationSection("pity");
+        if (pitySec != null && pitySec.isString("rarity")) pity.add(new Pity(pitySec.getString("rarity"), pitySec.getInt("every", 0)));
+        for (Map<?, ?> m : sec.getMapList("pity")) {
+            Object r = m.get("rarity"); Object n = m.get("every");
+            if (r == null || !(n instanceof Number num)) continue;
+            pity.add(new Pity(String.valueOf(r), num.intValue()));
+        }
+        pity.removeIf(r -> r.every() <= 0 || r.rarity() == null || r.rarity().isBlank());
         ConfigurationSection bc = sec.getConfigurationSection("broadcast");
         Map<String, Rarity> rarities = new LinkedHashMap<>();
         ConfigurationSection rs = sec.getConfigurationSection("rarities");
@@ -95,7 +109,7 @@ public final class GachaSpec {
         String styleName = sec.getString("style", "capsule");
         Style style = "reels".equalsIgnoreCase(styleName) ? Style.REELS
                 : "claw".equalsIgnoreCase(styleName) ? Style.CLAW : Style.CAPSULE;
-        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pityR, pityN, Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
+        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
                 bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"), ClawSpec.parse(sec.getConfigurationSection("claw")));
     }
 
@@ -112,8 +126,16 @@ public final class GachaSpec {
     public String coinTier() { return coinTier; }
     public Material priceItem() { return priceItem; }
     public int priceAmount() { return priceAmount; }
-    public String pityRarity() { return pityRarity; }
-    public int pityEvery() { return pityEvery; }
+    /** Every guarantee this machine carries, in file order. */
+    public List<Pity> pity() { return pity; }
+    /** The gentlest guarantee — what a one-line hint or an odds screen leads with. */
+    public Pity softestPity() {
+        Pity best = null;
+        for (Pity r : pity) if (best == null || r.every() < best.every()) best = r;
+        return best;
+    }
+    public String pityRarity() { Pity r = softestPity(); return r == null ? null : r.rarity(); }
+    public int pityEvery() { Pity r = softestPity(); return r == null ? 0 : r.every(); }
     public int multi() { return multi; }
     public int openAfter() { return openAfter; }
     public String broadcastMin() { return broadcastMin; }

@@ -26,7 +26,8 @@ import java.util.Map;
  *   cable: 0.22             # the cable's length when parked
  *   chute: [-0.66, -0.16]   # where the claw lets go, in model x/z
  *   tray: [-0.66, 0.74, -0.30]  # where a won prize lands (x, y, z)
- *   grab_chance: 0.20
+ *   grab_chance: 0.20      # the prongs close on it
+ *   slip_chance: 0.25      # ...and this many of those lose it again before the chute
  *   miss_chance: 0.08
  *   radius: 0.22            # how close to a prize counts as closing ON it
  *   pity_grabs: 6           # this many failures in a row and the next play is a certainty
@@ -46,18 +47,18 @@ public final class ClawSpec {
     private final double travelX, travelZ, top, floor, cable;
     private final double chuteX, chuteZ;
     private final double trayX, trayY, trayZ;
-    private final double grabChance, missChance, radius;
+    private final double grabChance, missChance, slipChance, radius;
     private final int pityGrabs;
     private final Map<String, Double> failModes;
     private final int timeoutTicks;
 
     private ClawSpec(Control control, double pad, double padOffset, double speed, double[] seat, boolean dropOnClick, double travelX, double travelZ,
                      double top, double floor, double cable, double chuteX, double chuteZ, double trayX, double trayY, double trayZ,
-                     double grabChance, double missChance, double radius, int pityGrabs, Map<String, Double> failModes, int timeoutTicks) {
+                     double grabChance, double missChance, double slipChance, double radius, int pityGrabs, Map<String, Double> failModes, int timeoutTicks) {
         this.control = control; this.pad = pad; this.padOffset = padOffset; this.speed = speed; this.seat = seat; this.dropOnClick = dropOnClick;
         this.travelX = travelX; this.travelZ = travelZ; this.top = top; this.floor = floor; this.cable = cable;
         this.chuteX = chuteX; this.chuteZ = chuteZ; this.trayX = trayX; this.trayY = trayY; this.trayZ = trayZ;
-        this.grabChance = grabChance; this.missChance = missChance; this.radius = radius; this.pityGrabs = pityGrabs;
+        this.grabChance = grabChance; this.missChance = missChance; this.slipChance = slipChance; this.radius = radius; this.pityGrabs = pityGrabs;
         this.failModes = failModes; this.timeoutTicks = timeoutTicks;
     }
 
@@ -78,7 +79,8 @@ public final class ClawSpec {
                 sec.getDouble("speed", 0.55), seat, sec.getBoolean("drop_on_click", true),
                 travel[0], travel[1], sec.getDouble("top", 2.05), sec.getDouble("floor", 1.24), sec.getDouble("cable", 0.22),
                 chute[0], chute[1], tray[0], tray[1], tray[2],
-                sec.getDouble("grab_chance", 0.20), sec.getDouble("miss_chance", 0.08), sec.getDouble("radius", 0.22),
+                sec.getDouble("grab_chance", 0.20), sec.getDouble("miss_chance", 0.08),
+                sec.getDouble("slip_chance", 0.25), sec.getDouble("radius", 0.22),
                 sec.getInt("pity_grabs", 6), modes, (int) Math.max(100L, ms / 50L));
     }
 
@@ -111,6 +113,10 @@ public final class ClawSpec {
     public double trayZ() { return trayZ; }
     public double grabChance() { return grabChance; }
     public double missChance() { return missChance; }
+    /** Of the grabs that DO close on a prize, this many lose it again on the way. */
+    public double slipChance() { return slipChance; }
+    /** What a play is actually worth: it has to hold, and then not drop it. */
+    public double holdChance() { return grabChance * (1 - slipChance); }
     public double radius() { return radius; }
     public int pityGrabs() { return pityGrabs; }
     public Map<String, Double> failModes() { return failModes; }
