@@ -285,8 +285,12 @@ you won, two-and-a-neighbour on the bottom tier so a common spin still reads as 
 - { at: 0.2, part: reel_3, reel: { symbols: "<strip>", stop: "{sym3}", blur: "eyJ…", over: 3.1, tease: 0.55 } }
 ```
 
-`reel:` generates its own frames — blur while the strip is a smear, symbols easing out, landing on
-`stop`; `tease` holds one symbol PAST the stop before snapping back. `symbols` is the strip (a list,
+`reel:` drives a DRUM: the part turns about the machine's axis (`axis:`, `spins:`) for `over`
+seconds, decelerating, and its symbol is swapped while the back face is toward the viewer, so a
+strip appears to roll past; it lands face-on on `stop`. `tease` makes the final turn a separate,
+much slower one — the reel all but stops on the neighbouring symbol, then rolls the last notch.
+`blur` is the smear shown while it is too fast to read. A `rotate:` step takes `pivot: [x,y,z]`
+(model space) to HINGE a part — a lever swinging on its mount — instead of spinning it on the spot. `symbols` is the strip (a list,
 so keep it in `vars:` and reference it as `"<strip>"` — cues get the `${var}` / `<var>` pass too).
 Slot themes add two vars the panels never needed (`glass` for the reel windows, `accent` for the win
 line and chasing lamps); because a theme is just a var override this needs no engine support, and a

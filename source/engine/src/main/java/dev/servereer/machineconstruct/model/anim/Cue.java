@@ -51,7 +51,8 @@ public final class Cue {
         public String particle; public int count; public double[] pOffset, pSpread; public double pSpeed;
         public String message;            // skinned message to the actor (MiniMessage, {vars})
         // reel: a slot reel — the player generates the frames (blur while fast, symbols easing out, landing on `stop`)
-        public List<String> reelSymbols; public String reelStop, reelBlur, reelAxis; public double reelOver, reelTease; public int reelSpins;
+        public List<String> reelSymbols; public String reelStop, reelBlur, reelAxis; public double reelOver, reelTease, reelDecel, reelJitter; public int reelSpins;
+        public String reelLand; public double reelLandPitch = 1;   // the clack when this reel stops (follows the jitter)
 
         public boolean isReel() { return reelSymbols != null && !reelSymbols.isEmpty(); }
 
@@ -121,6 +122,10 @@ public final class Cue {
             s.reelOver = num(re.get("over"), 2.0);
             s.reelTease = num(re.get("tease"), 0);
             s.reelSpins = (int) num(re.get("spins"), 0);
+            s.reelDecel = num(re.get("decel"), 0);
+            s.reelJitter = num(re.get("jitter"), 0);      // ± this fraction of the spin length, rolled per pull
+            s.reelLand = str(re.get("land"));
+            s.reelLandPitch = num(re.get("land_pitch"), 1);
             s.reelAxis = str(re.get("axis")) == null ? "x" : str(re.get("axis"));
         }
         if (m.containsKey("glow")) s.glow = m.get("glow") == null ? "" : String.valueOf(m.get("glow"));

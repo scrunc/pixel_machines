@@ -85,6 +85,9 @@ public final class CuePlayer {
     private static final class Reel {
         PacketDisplay d; double start, over, tease; List<DisplayContent> frames; DisplayContent blur, stop;
         MTransform rest; float[] axisWorld;
+        double decel, omega, declAngle;   // the coast/decelerate profile, worked out when the reel starts
+        String land; double landPitch;    // the clack when it stops — played here so jitter can't desync it
+        boolean landed;
         int stopIdx, spins; int shown = -2; boolean done;
     }
 
@@ -177,6 +180,11 @@ public final class CuePlayer {
             if (s.isReel()) {
                 Reel rl = new Reel();
                 rl.d = d; rl.start = now; rl.over = Math.max(0.2, s.reelOver); rl.tease = Math.max(0, s.reelTease);
+                rl.land = s.reelLand; rl.landPitch = s.reelLandPitch;
+                if (s.reelJitter > 0) {   // no two pulls stop at quite the same moment
+                    double j = 1 + (rng.nextDouble() * 2 - 1) * Math.min(0.5, s.reelJitter);
+                    rl.over = Math.max(0.4, rl.over * j);
+                }
                 rl.frames = new ArrayList<>();
                 for (String sym : s.reelSymbols) rl.frames.add(contentFor(d, fill(sym, r.vars)));
                 String stop = fill(s.reelStop == null ? "" : s.reelStop, r.vars).trim();
@@ -185,7 +193,18 @@ public final class CuePlayer {
                 rl.stopIdx = si >= 0 ? si : rl.frames.size() - 1;
                 rl.stop = si >= 0 ? rl.frames.get(si) : (stop.isEmpty() ? rl.frames.get(rl.frames.size() - 1) : contentFor(d, stop));
                 rl.blur = s.reelBlur == null || s.reelBlur.isBlank() ? null : contentFor(d, fill(s.reelBlur, r.vars));
-                rl.spins = s.reelSpins > 0 ? s.reelSpins : Math.max(4, (int) Math.round(rl.over * 2.6));
+                // Motion profile: COAST at a fixed speed (smeared by the blur frame), then decelerate over
+                // `decel` seconds so the last turns are slow enough for an eye to follow — an ease-out over the
+                // whole spin starts at several thousand degrees a second, which strobes instead of turning.
+                double spinSecs = rl.over - Math.max(0, rl.tease);
+                // the deceleration is what the eye actually watches, so it scales with the spin
+                double wantDecel = s.reelDecel > 0 ? s.reelDecel * (rl.over / Math.max(0.2, s.reelOver)) : spinSecs * 0.65;
+                rl.decel = Math.min(wantDecel, spinSecs * 0.9);
+                double body = spinSecs - rl.decel / 2;                                   // coast + half the decel ramp
+                rl.spins = s.reelSpins > 0 ? s.reelSpins : Math.max(2, (int) Math.round(COAST_DPS * body / 360.0));
+                double turns = rl.tease > 0 ? rl.spins - 1 : rl.spins;                    // the tease turn is separate
+                rl.omega = body <= 0.01 ? 0 : 360.0 * turns / body;                        // exact: lands face-on
+                rl.declAngle = rl.omega * rl.decel / 2;                                    // what the ramp-down covers
                 rl.rest = d.transform();
                 char ax = s.reelAxis == null ? 'x' : s.reelAxis.toLowerCase().charAt(0);
                 rl.axisWorld = r.root.rotateVec(ax == 'x' ? 1 : 0, ax == 'y' ? 1 : 0, ax == 'z' ? 1 : 0);
@@ -214,31 +233,45 @@ public final class CuePlayer {
         double t = now - rl.start;
         int n = rl.frames.size();
         double full = 360.0 * rl.spins;
+        double spinSecs = rl.over - Math.max(0, rl.tease);
+        double coast = spinSecs - rl.decel;
         double angle, speed;   // degrees, degrees per second
         if (t >= rl.over) { angle = full; speed = 0; }
-        else if (rl.tease > 0 && t > rl.over - rl.tease) {          // the last notch, crawling
-            double u = (t - (rl.over - rl.tease)) / rl.tease;
+        else if (rl.tease > 0 && t > spinSecs) {                    // the last notch, crawling
+            double u = (t - spinSecs) / rl.tease;
             double e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;   // ease in-out
             angle = full - 360 + 360 * e;
             speed = 360 / rl.tease;
-        } else {
-            double span = rl.over - Math.max(0, rl.tease);
-            double u = Math.min(1, t / span);
-            double target = rl.tease > 0 ? full - 360 : full;
-            angle = target * (1 - Math.pow(1 - u, 3));                          // ease-out cubic
-            speed = 3 * Math.pow(1 - u, 2) * target / span;
+        } else if (t <= coast) {                                    // coasting: one speed, smeared
+            angle = rl.omega * t;
+            speed = rl.omega;
+        } else {                                                    // ramping down to a stop
+            double u = Math.min(1, (t - coast) / rl.decel);
+            angle = rl.omega * coast + rl.declAngle * (1 - (1 - u) * (1 - u));
+            speed = 2 * rl.declAngle / rl.decel * (1 - u);
         }
         rl.d.forceTransform(rl.rest.rotatedAbout(rl.axisWorld[0], rl.axisWorld[1], rl.axisWorld[2], angle, rl.rest.tx, rl.rest.ty, rl.rest.tz));
         // one strip step per full turn — the swap happens while the back face is showing
         int k = (int) Math.floor((angle + 180) / 360);
-        if (rl.blur != null && speed > 900) show(rl, rl.blur, -4);
+        if (rl.blur != null && speed > BLUR_DPS) show(rl, rl.blur, -4);
         else {
             int idx = ((rl.stopIdx - (rl.spins - k)) % n + n) % n;
             show(rl, k >= rl.spins ? rl.stop : rl.frames.get(idx), k >= rl.spins ? -1 : idx);
         }
         rl.d.consumeDirty(); tracker.refresh(rl.d, 0);
-        if (t >= rl.over) rl.done = true;
+        if (t >= rl.over && !rl.landed) {
+            rl.landed = true; rl.done = true;
+            if (rl.land != null && !rl.land.isBlank()) {
+                Location at = rl.d.origin().clone().add(rl.rest.tx, rl.rest.ty, rl.rest.tz);
+                try { at.getWorld().playSound(at, rl.land.trim(), 1.0f, (float) rl.landPitch); } catch (Throwable ignored) { }
+            }
+        }
     }
+
+    /** How fast a coasting reel turns, and the speed under which a turning symbol is worth showing. */
+    // Coast fast enough to smear, but show real symbols early enough that the slow-down is worth
+    // watching: below BLUR_DPS the tail covers ~2 turns of readable rotation instead of half of one.
+    private static final double COAST_DPS = 1150, BLUR_DPS = 820;
 
     private void show(Reel rl, DisplayContent c, int tag) {
         if (rl.shown == tag) return;   // same frame as last tick (blur, a held symbol) — don't spam the packet
