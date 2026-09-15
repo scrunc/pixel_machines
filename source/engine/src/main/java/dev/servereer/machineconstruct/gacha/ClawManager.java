@@ -1,5 +1,6 @@
 package dev.servereer.machineconstruct.gacha;
 
+import dev.servereer.machineconstruct.core.DisplayContent;
 import dev.servereer.machineconstruct.core.ItemContent;
 import dev.servereer.machineconstruct.core.MTransform;
 import dev.servereer.machineconstruct.core.PacketDisplay;
@@ -43,7 +44,8 @@ import java.util.UUID;
 public final class ClawManager implements Listener {
 
     private static final int TICK = 2;                   // the session clock, in server ticks
-    private static final double DROP_S = 0.9, CLOSE_S = 0.5, LIFT_S = 1.1, RETURN_S = 1.5, RELEASE_S = 0.7, RESET_S = 1.0;
+    private static final double DROP_S = 1.6, CLOSE_S = 0.75, LIFT_S = 1.3, RETURN_S = 1.5, RELEASE_S = 0.7, RESET_S = 1.0;
+    private static final double DROP_FALL = 0.80;    // the dive is over at 80% of DROP_S; the rest is the claw hanging there
 
     private enum Phase { DRIVE, DROP, CLOSE, LIFT, RETURN, RELEASE, RESET }
 
@@ -54,6 +56,9 @@ public final class ClawManager implements Listener {
         double phaseStart;                    // seconds (server clock) the phase began
         double x, z;                          // where the claw is, in model space relative to centre
         double open;                          // prongs: 0 shut, 1 wide
+        boolean landed;                       // the dive is done (one sound, not one per tick)
+        PacketDisplay nearest;                // the pile head the prongs closed over
+        PacketDisplay taken;                  // ...and the one actually lifted out of the pile
         double wantX, wantZ;                  // where the controls say it should be
         double stickX, stickZ;                // the joystick's lean, -1..1 on each axis
         Location seatLoc; Float walkWas;      // the player is held at the cabinet while they play
@@ -75,6 +80,8 @@ public final class ClawManager implements Listener {
     private final DisplayTracker tracker;
     private final GachaManager gacha;
     private final Map<Machine, Session> sessions = new HashMap<>();
+    private final java.util.Set<PacketDisplay> empty = new java.util.HashSet<>();          // pile slots waiting to be refilled
+    private final Map<PacketDisplay, DisplayContent> takenWas = new HashMap<>();           // ...and what was in them
     private final Random rng = new Random();
 
     public ClawManager(Plugin plugin, DisplayTracker tracker, GachaManager gacha) {
@@ -154,8 +161,9 @@ public final class ClawManager implements Listener {
                     (e.getInput().isRight() ? 1 : 0) - (e.getInput().isLeft() ? 1 : 0), 0,
                     (e.getInput().isBackward() ? 1 : 0) - (e.getInput().isForward() ? 1 : 0));
             if (ss.phase == Phase.DRIVE) {
-                // the player faces the machine, so their "forward" is the machine's +z (into the box)
-                ss.stickX = -in.getX(); ss.stickZ = in.getZ();
+                // The player faces the machine, so their forward is the machine's +z (deeper into the box)
+                // and their right is model -x. `in` reads (right-left, 0, backward-forward), hence both flips.
+                ss.stickX = -in.getX(); ss.stickZ = -in.getZ();
                 if (e.getInput().isJump()) drop(e.getPlayer(), en.getKey());
             } else { ss.stickX = 0; ss.stickZ = 0; }
             return;
@@ -182,7 +190,7 @@ public final class ClawManager implements Listener {
 
     public void forget(Machine m) {
         Session ss = sessions.remove(m);
-        if (ss != null) { unseat(ss); release(ss, false); }
+        if (ss != null) { restock(ss, 1); unseat(ss); release(ss, false); }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -262,13 +270,16 @@ public final class ClawManager implements Listener {
             }
             case DROP -> {
                 double u = Math.min(1, t / DROP_S);
-                ss.open = 1.0;                       // open on the way down
-                drawGantry(ss, c.cable() + (c.top() - c.floor() - c.cable()) * ease(u));
+                double fall = Math.min(1, u / DROP_FALL);
+                ss.open = Math.min(1, 0.25 + fall * 1.5);        // the prongs spread as it goes down, wide before it lands
+                // eased at BOTH ends: the winch takes up the slack, runs, and sets the claw down rather than slamming it
+                drawGantry(ss, c.cable() + (c.top() - c.floor() - c.cable()) * smooth(fall));
+                if (!ss.landed && fall >= 1) { ss.landed = true; sound(ss, "block.chain.place", 0.7f, 0.9f); }
                 if (u >= 1) { ss.phase = Phase.CLOSE; ss.phaseStart = now; decide(ss); sound(ss, "block.iron_trapdoor.close", 0.8f, 0.8f); }
             }
             case CLOSE -> {
                 double u = Math.min(1, t / CLOSE_S);
-                ss.open = 1 - u;
+                ss.open = 1 - smooth(Math.min(1, u / 0.6));      // shuts over the first 60%, then holds what it has
                 drawGantry(ss, c.top() - c.floor());
                 if (u >= 1) {
                     ss.phase = Phase.LIFT; ss.phaseStart = now;
@@ -318,12 +329,16 @@ public final class ClawManager implements Listener {
     private void decide(Session ss) {
         ClawSpec c = ss.claw;
         double best = Double.MAX_VALUE;
+        ss.nearest = null;
         for (PacketDisplay d : CuePlayer.select(ss.m, "pile_*")) {
+            if (empty.contains(d)) continue;             // that slot is still waiting to be restocked
             float[] p = modelOf(ss, d.transform());
             double dx = p[0] - (0.5 + ss.x), dz = p[2] - (0.5 + ss.z);
-            best = Math.min(best, Math.sqrt(dx * dx + dz * dz));
+            double r = Math.sqrt(dx * dx + dz * dz);
+            if (r < best) { best = r; ss.nearest = d; }
         }
         boolean onPrize = best <= c.radius();
+        if (!onPrize) ss.nearest = null;
         double chance = onPrize ? c.grabChance() : c.missChance();
         GachaSeries s = gacha.series(ss.spec);
         GachaSeries.Record rec = s.record(ss.player);
@@ -376,6 +391,7 @@ public final class ClawManager implements Listener {
 
     private void finishFail(Session ss) {
         carry(ss, false);
+        restock(ss, 1);          // it tumbled back into the heap
         jostlePile(ss);
         Player p = plugin.getServer().getPlayer(ss.player);
         if (p != null) {
@@ -390,6 +406,7 @@ public final class ClawManager implements Listener {
 
     private void payOut(Session ss) {
         carry(ss, false);
+        restock(ss, ss.claw.restockTicks());
         Player p = plugin.getServer().getPlayer(ss.player);
         if (p == null || ss.prize == null) return;
         gacha.deliverOne(ss.m, ss.t, p, ss.prize);
@@ -489,14 +506,52 @@ public final class ClawManager implements Listener {
     /** A hair of slop so no two grabs close identically. */
     private double jitterClosed(Session ss) { return 0.04 + rng.nextDouble() * 0.05; }
 
-    /** Show or hide the carried prize (the real item, so a slip drops the thing they nearly won). */
+    /**
+     * Show or hide what the claw is carrying. When the prongs closed over a head that is actually SITTING in
+     * the box, that very head is what comes up: it vanishes from the pile and rides the claw, so the player
+     * watches the thing they were aiming at leave the heap. The slot is restocked later ({@link #restock}) —
+     * ten seconds after a win, or the instant a slip drops it back in.
+     */
     private void carry(Session ss, boolean on) {
+        DisplayContent lifted = null;
+        if (on && ss.nearest != null && ss.taken == null && !empty.contains(ss.nearest)) {
+            lifted = ss.nearest.baseContent();
+            ss.taken = ss.nearest;
+            empty.add(ss.nearest);
+            ss.nearest.forceContent(CuePlayer.blank(ss.nearest));
+            ss.nearest.consumeDirty(); tracker.refresh(ss.nearest, 0);
+        } else if (on && ss.taken != null) lifted = takenWas.get(ss.taken);
         for (PacketDisplay d : CuePlayer.select(ss.m, "held")) {
-            if (on && ss.prize != null) d.forceContent(new ItemContent(ss.prize.entry().shown(), ItemContent.context("fixed")));
+            if (on && lifted != null) d.forceContent(lifted);
+            else if (on && ss.prize != null) d.forceContent(new ItemContent(ss.prize.entry().shown(), ItemContent.context("fixed")));
             else if (on) d.forceContent(new ItemContent(pilePrize(ss), ItemContent.context("fixed")));
             else d.forceContent(CuePlayer.blank(d));
             d.consumeDirty(); tracker.refresh(d, 0);
         }
+        if (lifted != null && ss.taken != null) takenWas.put(ss.taken, lifted);
+    }
+
+    /**
+     * Put a lifted head back in the box. A won prize leaves a gap the machine fills a moment later (the
+     * default ten seconds, so the pile visibly empties as people win); a dropped one is back at once,
+     * because the player just watched it fall in.
+     */
+    private void restock(Session ss, long delayTicks) {
+        PacketDisplay d = ss.taken;
+        if (d == null) return;
+        DisplayContent was = takenWas.remove(d);
+        ss.taken = null; ss.nearest = null;
+        if (was == null) { empty.remove(d); return; }
+        Machine m = ss.m;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            empty.remove(d);
+            if (!m.displays().contains(d)) return;   // the machine was picked up or re-rendered in the meantime
+            d.forceContent(was); d.consumeDirty(); tracker.refresh(d, 0);
+            try {
+                Location at = m.anchor().clone().add(0.5, 1.3, 0.5);
+                at.getWorld().playSound(at, "entity.item.pickup", 0.4f, 0.7f);
+            } catch (Throwable ignored) { }
+        }, Math.max(1, delayTicks));
     }
 
     /** What a failing claw appears to be holding: a random piece of the series. */
@@ -563,5 +618,11 @@ public final class ClawManager implements Listener {
 
     private double now() { return plugin.getServer().getCurrentTick() / 20.0; }
     private static double ease(double u) { return 1 - Math.pow(1 - Math.min(1, Math.max(0, u)), 3); }
+
+    /** Eased at both ends — a winch starting and stopping, not a lift snapping between floors. */
+    private static double smooth(double u) {
+        double x = Math.min(1, Math.max(0, u));
+        return x * x * (3 - 2 * x);
+    }
     private static double clamp(double v, double lo, double hi) { return v < lo ? lo : Math.min(v, hi); }
 }

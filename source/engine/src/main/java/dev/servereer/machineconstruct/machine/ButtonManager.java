@@ -160,7 +160,8 @@ public final class ButtonManager implements Listener {
         catch (Throwable t) { plugin.getLogger().warning("[MachineConstruct] button action failed: " + t); }
         if (d.locked()) return;
         MTransform rest = d.transform();
-        float[] push = rest.rotateVec(0, 0, (float) spec.depth());   // into the face (+Z in model space)
+        double[] dir = spec.push();   // which way this one sinks: into its face by default, DOWN on a console shelf
+        float[] push = rest.rotateVec((float) (dir[0] * spec.depth()), (float) (dir[1] * spec.depth()), (float) (dir[2] * spec.depth()));
         d.setTransform(rest.translated(push[0], push[1], push[2]));
         d.consumeDirty(); tracker.refresh(d);
         // the caption sinks with it (text parts named by the spec's label, e.g. lbl_daily for btn_daily)

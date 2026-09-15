@@ -191,7 +191,10 @@ A machine file can also carry `enabled: false` at top level to park it without d
   click, with a click sound) and runs `action` — `state:next` · `state:prev` · `state:set:<name>` ·
   `refresh` · `command:<as the player>` · `console:<cmd>` · `message:<MiniMessage>`. `lit:` +
   `lit_when:` swap its block while that panel state is active. Its caption sinks with it: the
-  part named by `label:` (default: `lbl_X` for a part named `btn_X`). Head themes work too — the
+  part named by `label:` (default: `lbl_X` for a part named `btn_X`). `push:` picks WHICH WAY it
+  sinks — `in` (default, into a front-facing panel) · `out` · `down` · `up` · `left` · `right`, or a
+  model-space vector `[0, -1, 0]`. A button lying face-up on a console shelf wants `push: down`;
+  without it the press reads as the button sliding sideways. Head themes work too — the
   ray-cast reads the part's anchoring (block = corner box, head/item = centred box). See `core/ButtonSpec`.
 - **`panel.states`** — named var sets (`weekly: { period: topweek, label: "this week", btn: "WEEK" }`)
   substituted into every panel text as `{period}` / `{label}` / `{state}` / …; `default_state`
@@ -358,12 +361,17 @@ claw:
   slip_chance: 0.25       # and this many grabs lose it again on the way (so a play is worth grab x (1 - slip))
   pity_grabs: 6           # failures in a row before the claw is made to hold (a guaranteed play never slips)
   fail_modes: { miss: 40, slip_early: 35, slip_late: 25 }
+  restock: 10s            # how long a lifted head leaves a gap in the pile before the machine refills it
 ```
 
 A failure is *performed*, not scripted: the prongs close on nothing, or the prize is lifted a block
-and tumbles back, or it is carried almost to the chute and dropped. The claw carries the REAL rolled
-item, so what slips out is the thing the player nearly won, the closing angle is jittered, and the
-pile settles where the claw has been rummaging. Parts the engine drives by name: `rail*`, `carriage`,
+and tumbles back, or it is carried almost to the chute and dropped. **What the claw lifts is the head
+that was sitting in the box**: when the prongs close over a `pile_*` part, that part goes blank and its
+head rides the claw, so the player watches the thing they aimed at leave the heap. A win leaves the
+gap open for `restock` (10s by default) and the machine quietly refills it; a slip puts it back the
+moment it lands. A slot waiting to be restocked is not a target for the next play. If the prongs close
+nowhere near a head, the claw carries a piece of the series instead, so a slip still shows something.
+The closing angle is jittered, and the pile settles where the claw has been rummaging. Parts the engine drives by name: `rail*`, `carriage`,
 `cable` (its Y scale is the cable), `claw_head`, `prong_*` (they hinge at the head), `held` (the
 carried prize — list it in `gacha.hidden`), `pile_*` (the prizes, and what `radius` is measured
 against), and `stick` + `stick_ball` (the joystick, hinged at the shaft's foot). Give the cabinet a

@@ -91,7 +91,14 @@ public final class ModelLoader {
             // the caption that sinks with the button: explicit `label:`, else the btn_X → lbl_X convention
             String label = btn.getString("label");
             if (label == null && node.name() != null && node.name().startsWith("btn_")) label = "lbl_" + node.name().substring(4);
-            node.button(new dev.servereer.machineconstruct.core.ButtonSpec(action, hover, content, lit, btn.getString("lit_when"), btn.getDouble("depth", 0.03), label));
+            // which way it sinks: a keyword, or a model-space vector for anything odd
+            double[] push;
+            if (btn.isList("push")) {
+                List<Double> pv = btn.getDoubleList("push");
+                push = pv.size() == 3 ? new double[]{pv.get(0), pv.get(1), pv.get(2)} : new double[]{0, 0, 1};
+            } else push = dev.servereer.machineconstruct.core.ButtonSpec.direction(btn.getString("push"));
+            node.button(new dev.servereer.machineconstruct.core.ButtonSpec(action, hover, content, lit, btn.getString("lit_when"),
+                    btn.getDouble("depth", 0.03), label, push));
         }
 
         // Billboard (how the display faces the camera): fixed | vertical | horizontal | center.

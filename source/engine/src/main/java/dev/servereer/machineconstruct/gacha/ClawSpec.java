@@ -33,6 +33,7 @@ import java.util.Map;
  *   pity_grabs: 6           # this many failures in a row and the next play is a certainty
  *   fail_modes: { miss: 40, slip_early: 35, slip_late: 25 }
  *   timeout: 25s
+ *   restock: 10s            # a won head leaves a gap in the pile for this long before the machine refills it
  * </pre>
  */
 public final class ClawSpec {
@@ -50,16 +51,16 @@ public final class ClawSpec {
     private final double grabChance, missChance, slipChance, radius;
     private final int pityGrabs;
     private final Map<String, Double> failModes;
-    private final int timeoutTicks;
+    private final int timeoutTicks, restockTicks;
 
     private ClawSpec(Control control, double pad, double padOffset, double speed, double[] seat, boolean dropOnClick, double travelX, double travelZ,
                      double top, double floor, double cable, double chuteX, double chuteZ, double trayX, double trayY, double trayZ,
-                     double grabChance, double missChance, double slipChance, double radius, int pityGrabs, Map<String, Double> failModes, int timeoutTicks) {
+                     double grabChance, double missChance, double slipChance, double radius, int pityGrabs, Map<String, Double> failModes, int timeoutTicks, int restockTicks) {
         this.control = control; this.pad = pad; this.padOffset = padOffset; this.speed = speed; this.seat = seat; this.dropOnClick = dropOnClick;
         this.travelX = travelX; this.travelZ = travelZ; this.top = top; this.floor = floor; this.cable = cable;
         this.chuteX = chuteX; this.chuteZ = chuteZ; this.trayX = trayX; this.trayY = trayY; this.trayZ = trayZ;
         this.grabChance = grabChance; this.missChance = missChance; this.slipChance = slipChance; this.radius = radius; this.pityGrabs = pityGrabs;
-        this.failModes = failModes; this.timeoutTicks = timeoutTicks;
+        this.failModes = failModes; this.timeoutTicks = timeoutTicks; this.restockTicks = restockTicks;
     }
 
     public static ClawSpec parse(ConfigurationSection sec) {
@@ -72,6 +73,7 @@ public final class ClawSpec {
         if (fm != null) for (String k : fm.getKeys(false)) modes.put(k.toLowerCase(), fm.getDouble(k, 0));
         if (modes.isEmpty()) { modes.put("miss", 40.0); modes.put("slip_early", 35.0); modes.put("slip_late", 25.0); }
         long ms = dev.servereer.machineconstruct.grinder.GrinderSpec.parseTimeMillis(sec.getString("timeout", "25s"));
+        long restockMs = dev.servereer.machineconstruct.grinder.GrinderSpec.parseTimeMillis(sec.getString("restock", "10s"));
         double[] seat = triple(sec, "seat", 0, 0, -1.1);
         return new ClawSpec(
                 "pad".equalsIgnoreCase(sec.getString("control", "stick")) ? Control.PAD : Control.STICK,
@@ -81,7 +83,7 @@ public final class ClawSpec {
                 chute[0], chute[1], tray[0], tray[1], tray[2],
                 sec.getDouble("grab_chance", 0.20), sec.getDouble("miss_chance", 0.08),
                 sec.getDouble("slip_chance", 0.25), sec.getDouble("radius", 0.22),
-                sec.getInt("pity_grabs", 6), modes, (int) Math.max(100L, ms / 50L));
+                sec.getInt("pity_grabs", 6), modes, (int) Math.max(100L, ms / 50L), (int) Math.max(1L, restockMs / 50L));
     }
 
     private static double[] pair(ConfigurationSection sec, String key, double a, double b) {
@@ -121,4 +123,6 @@ public final class ClawSpec {
     public int pityGrabs() { return pityGrabs; }
     public Map<String, Double> failModes() { return failModes; }
     public int timeoutTicks() { return timeoutTicks; }
+    /** How long the gap a won head leaves in the pile stays open before the machine refills it. */
+    public int restockTicks() { return restockTicks; }
 }
