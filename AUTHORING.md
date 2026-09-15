@@ -372,7 +372,9 @@ gap open for `restock` (10s by default) and the machine quietly refills it; a sl
 moment it lands. A slot waiting to be restocked is not a target for the next play. If the prongs close
 nowhere near a head, the claw carries a piece of the series instead, so a slip still shows something.
 The closing angle is jittered, and the pile settles where the claw has been rummaging. Parts the engine drives by name: `rail*`, `carriage`,
-`cable` (its Y scale is the cable), `claw_head`, `prong_*` (they hinge at the head), `held` (the
+`cable` (its Y scale is the cable), `claw_head`, `prong_*` (each hinges at its OWN top, on an axis
+square to the line out from the claw's centre, so it splays straight outwards — put as many as you
+like anywhere round the head; the engine reads their positions, not their numbering), `held` (the
 carried prize — list it in `gacha.hidden`), `pile_*` (the prizes, and what `radius` is measured
 against), and `stick` + `stick_ball` (the joystick, hinged at the shaft's foot). Give the cabinet a
 START button (`action: gacha:pull`) and a DROP button (`action: claw:drop`). Geometry under `claw:` must match the model, which is why the machine is generated:

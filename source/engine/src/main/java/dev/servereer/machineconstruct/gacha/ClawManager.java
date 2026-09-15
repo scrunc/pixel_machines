@@ -455,24 +455,28 @@ public final class ClawManager implements Listener {
     }
 
     /**
-     * The prongs ride under the claw head and HINGE there — rotating each about its own centre would
-     * make them windmill rather than splay. Pivot is the claw head's centre for this cable length.
+     * The prongs hinge where they MEET the claw head — each about its own top, on an axis square to the
+     * line from the claw's centre out to that prong, so it splays straight outwards and its top never
+     * leaves the head. Read off each part's own position rather than its index: a claw may carry any
+     * number of fingers, anywhere around the head, and the selector's order is not a promise.
      */
     private void prongs(Session ss, double cableLen) {
         ClawSpec c = ss.claw;
         double deg = 46 * clamp(ss.open, 0, 1.2);
-        float[] pivot = ss.root.apply((float) (0.5 + ss.x), (float) (c.top() - cableLen), (float) (0.5 + ss.z));
-        float[] ax = ss.root.rotateVec(1, 0, 0), az = ss.root.rotateVec(0, 0, 1);
-        int i = 0;
         for (PacketDisplay d : CuePlayer.select(ss.m, "prong_*")) {
             MTransform rest = ss.rest.get(d);
-            if (rest == null) { i++; continue; }
+            if (rest == null) continue;
             float[] w = ss.root.rotateVec((float) ss.x, (float) -(cableLen - c.cable()), (float) ss.z);
             MTransform base = rest.translated(w[0], w[1], w[2]);
-            float[] axis = i == 1 ? ax : az;
-            double sign = i == 2 ? -1 : 1;          // the two side prongs splay opposite ways
-            push(d, base.rotatedAbout(axis[0], axis[1], axis[2], deg * sign, pivot[0], pivot[1], pivot[2]));
-            i++;
+            // where this prong sits relative to the claw's axis, in model space
+            float[] at = modelOf(ss, base);
+            double rx = at[0] + rest.sx / 2 - (0.5 + ss.x), rz = at[2] + rest.sz / 2 - (0.5 + ss.z);
+            double len = Math.hypot(rx, rz);
+            if (len < 1e-4) { rx = 0; rz = -1; len = 1; }        // one dead under the centre: send it forward
+            float[] axis = ss.root.rotateVec((float) (-rz / len), 0, (float) (rx / len));
+            float[] mid = ss.root.rotateVec(rest.sx / 2, 0, rest.sz / 2);
+            push(d, base.rotatedAbout(axis[0], axis[1], axis[2], deg,
+                    base.tx + mid[0], base.ty + rest.sy, base.tz + mid[2]));
         }
     }
 
