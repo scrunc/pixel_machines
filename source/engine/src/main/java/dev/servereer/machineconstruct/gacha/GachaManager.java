@@ -101,6 +101,18 @@ public final class GachaManager {
     public GachaSeries seriesByKey(String key) { return series.get(key); }
     public java.util.Collection<GachaSeries> allSeries() { return series.values(); }
 
+    /** Take one play's price — the claw charges up front and may then pay nothing. */
+    boolean chargeFor(Player p, MachineType t) { return charge(p, t.gacha(), t.skin(), 1); }
+
+    /** One roll of the series (rarity with pity, then a weighted entry), or null when nothing is loaded. */
+    GachaManager.Result rollFor(GachaSpec spec, GachaSeries s, GachaSeries.Record rec) { return roll(spec, s, rec); }
+
+    /** Hand over a single already-rolled prize: collection, duplicates, commands, broadcast — the usual path. */
+    void deliverOne(Machine m, MachineType t, Player p, Result r) {
+        Waiting w = new Waiting(p, new ArrayList<>(List.of(r)));
+        deliver(m, t, w);
+    }
+
     /** Re-read every series file (after Dev's Diary / hand edits). */
     public int reload() { for (GachaSeries s : series.values()) s.load(); return series.size(); }
 
@@ -527,8 +539,8 @@ public final class GachaManager {
         return v;
     }
 
-    private static Component msg(MenuSkin sk, String key, String def) { return msg(sk, key, def, null); }
-    private static Component msg(MenuSkin sk, String key, String def, Map<String, String> vars) {
+    static Component msg(MenuSkin sk, String key, String def) { return msg(sk, key, def, null); }
+    static Component msg(MenuSkin sk, String key, String def, Map<String, String> vars) {
         String over = sk == null ? null : sk.msg(key, null, vars);
         String body = over != null ? over : MenuSkin.fill(def, vars);
         return MenuSkin.mini((sk == null ? "<gold>Capsules <dark_gray>» " : sk.prefix("<gold>Capsules <dark_gray>» ")) + body);

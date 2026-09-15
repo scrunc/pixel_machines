@@ -41,7 +41,7 @@ public final class GachaSpec {
     }
 
     /** How a machine performs a pull: a capsule that parks in a tray, or reels that spin and pay out at once. */
-    public enum Style { CAPSULE, REELS }
+    public enum Style { CAPSULE, REELS, CLAW }
 
     private final String series, title;
     private final Style style;
@@ -53,12 +53,13 @@ public final class GachaSpec {
     private final int openAfter;
     private final String broadcastMin; private final double broadcastRadius;
     private final List<String> hidden;
+    private final ClawSpec claw;      // gacha.claw — set when style: claw
     private final String seedCrate;   // gacha.seed_crate — an ExcellentCrates crate id whose rewards fill the series once
     private final Map<String, Rarity> rarities;
 
     private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, String pityRarity, int pityEvery,
-                      int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate) {
-        this.seedCrate = seedCrate;
+                      int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate, ClawSpec claw) {
+        this.seedCrate = seedCrate; this.claw = claw;
         this.series = series; this.title = title; this.style = style; this.priceMoney = priceMoney; this.priceCoins = priceCoins; this.coinTier = coinTier; this.priceItem = priceItem; this.priceAmount = priceAmount;
         this.pityRarity = pityRarity; this.pityEvery = pityEvery; this.multi = multi; this.openAfter = openAfter;
         this.broadcastMin = broadcastMin; this.broadcastRadius = broadcastRadius;
@@ -91,15 +92,20 @@ public final class GachaSpec {
             rarities.put(k, new Rarity(k, r.getDouble("weight", 1), r.getString("capsule", ""), r.getString("color", "#9fb4c7"),
                     r.getBoolean("glow", false), r.getString("sound"), r.getDouble("pitch", 1.0), r.getString("fx"), r.getString("label", k), r.getString("symbol")));
         }
-        Style style = "reels".equalsIgnoreCase(sec.getString("style", "capsule")) ? Style.REELS : Style.CAPSULE;
+        String styleName = sec.getString("style", "capsule");
+        Style style = "reels".equalsIgnoreCase(styleName) ? Style.REELS
+                : "claw".equalsIgnoreCase(styleName) ? Style.CLAW : Style.CAPSULE;
         return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pityR, pityN, Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
-                bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"));
+                bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"), ClawSpec.parse(sec.getConfigurationSection("claw")));
     }
 
     public String series() { return series; }
     public String title() { return title; }
     public Style style() { return style; }
     public boolean isReels() { return style == Style.REELS; }
+    public boolean isClaw() { return style == Style.CLAW && claw != null; }
+    /** The crane's geometry and odds, or null when this isn't a claw machine. */
+    public ClawSpec claw() { return claw; }
     public double priceMoney() { return priceMoney; }
     public int priceCoins() { return priceCoins; }
     /** Which coin-ladder tier the machine takes when its series has no coin of its own. */

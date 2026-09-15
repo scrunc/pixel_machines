@@ -296,6 +296,36 @@ Slot themes add two vars the panels never needed (`glass` for the reel windows, 
 line and chasing lamps); because a theme is just a var override this needs no engine support, and a
 theme whose solid parts are head textures still wants a real translucent block for `glass`.
 
+**`style: claw`** is a machine the player DRIVES (ADR 0047), and the only one allowed to pay nothing —
+its prizes are expensive. A coin hands over the controls; the player stands on the machine's control
+pad and WALKS (where they stand on the plate is where the claw sits over the pile, one to one), then
+clicks anywhere to drop it. The claw holds about one play in five: `grab_chance` when it closes
+within `radius` of a prize, `miss_chance` when it closes over nothing, and `pity_grabs` failures in a
+row forces a hold. A grab then rolls the reward the usual way (rarity + pity + weighted entry), so
+the crane decides *whether*, never *what*.
+
+```yaml
+claw:
+  control: pad            # walk the plate
+  pad: 1.4                # plate size, and pad_offset blocks in front of the machine
+  travel: [0.62, 0.34]    # how far the claw may run from centre, x and z
+  top: 2.08               # the gantry; floor: how deep it dives; cable: parked length
+  chute: [-0.66, -0.20]   # where it lets go; tray: [x, y, z] where a won prize lands
+  grab_chance: 0.20
+  miss_chance: 0.08
+  pity_grabs: 6
+  fail_modes: { miss: 40, slip_early: 35, slip_late: 25 }
+```
+
+A failure is *performed*, not scripted: the prongs close on nothing, or the prize is lifted a block
+and tumbles back, or it is carried almost to the chute and dropped. The claw carries the REAL rolled
+item, so what slips out is the thing the player nearly won, the closing angle is jittered, and the
+pile settles where the claw has been rummaging. Parts the engine drives by name: `rail*`, `carriage`,
+`cable` (its Y scale is the cable), `claw_head`, `prong_*` (they hinge at the head), `held` (the
+carried prize — list it in `gacha.hidden`), `pile_*` (the prizes, and what `radius` is measured
+against). Geometry under `claw:` must match the model, which is why the machine is generated:
+`templates/abyssal-market/tools/gen_claw.py`.
+
 ## Cheat-sheet
 
 | want | write |

@@ -49,6 +49,7 @@ public final class GachaSeries {
     public static final class Record {
         public int pulls;            // total pulls
         public int sinceRare;        // pulls since the pity rarity (or better) last dropped
+        public int sinceGrab;        // claw machines: failed plays in a row (pity_grabs forces the next one)
         public final List<String> owned = new ArrayList<>();   // entry ids owned (once pieces + anything pulled)
         public final Map<String, Integer> counts = new HashMap<>();   // entry id → times pulled
     }
@@ -170,6 +171,7 @@ public final class GachaSeries {
         for (Map.Entry<UUID, Record> pe : players.entrySet()) {
             ConfigurationSection one = ps.createSection(pe.getKey().toString());
             one.set("pulls", pe.getValue().pulls); one.set("since_rare", pe.getValue().sinceRare);
+            if (pe.getValue().sinceGrab > 0) one.set("since_grab", pe.getValue().sinceGrab);
             one.set("owned", new ArrayList<>(pe.getValue().owned));
             ConfigurationSection cs = one.createSection("counts");
             for (Map.Entry<String, Integer> c : pe.getValue().counts.entrySet()) cs.set(c.getKey(), c.getValue());
@@ -218,7 +220,7 @@ public final class GachaSeries {
                 Record r = new Record();
                 ConfigurationSection one = ps.getConfigurationSection(k);
                 if (one == null) continue;
-                r.pulls = one.getInt("pulls"); r.sinceRare = one.getInt("since_rare");
+                r.pulls = one.getInt("pulls"); r.sinceRare = one.getInt("since_rare"); r.sinceGrab = one.getInt("since_grab");
                 r.owned.addAll(one.getStringList("owned"));
                 ConfigurationSection cs = one.getConfigurationSection("counts");
                 if (cs != null) for (String id : cs.getKeys(false)) r.counts.put(id, cs.getInt(id));

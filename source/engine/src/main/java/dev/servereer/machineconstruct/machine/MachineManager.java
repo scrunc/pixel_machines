@@ -95,6 +95,7 @@ public final class MachineManager implements Listener,
     private final CuePlayer cues;                 // one-shot scripted animations (cues:)
     private final dev.servereer.machineconstruct.gacha.GachaManager gacha;   // capsule machines (ADR 0045)
     private final dev.servereer.machineconstruct.gui.GachaMenus gachaMenus;
+    private final dev.servereer.machineconstruct.gacha.ClawManager claw;   // crane sessions (style: claw)
     public dev.servereer.machineconstruct.gacha.GachaManager gacha() { return gacha; }
     private boolean panelIndexDirty;
     private final dev.servereer.machineconstruct.gui.JukeboxMenus jukeboxMenus;
@@ -173,6 +174,7 @@ public final class MachineManager implements Listener,
             @Override public void rerender(Machine m) { renderMachine(m); }
         });
         this.gachaMenus = new dev.servereer.machineconstruct.gui.GachaMenus(plugin, gacha, this::typeOfMachine);
+        this.claw = new dev.servereer.machineconstruct.gacha.ClawManager(plugin, tracker, gacha);
         this.backups = new MachineBackupStore(plugin.getDataFolder(), backupRetention());
         this.animTicks = Math.max(1, animationInterval);
         this.processTicks = Math.max(1, processInterval);
@@ -272,6 +274,7 @@ public final class MachineManager implements Listener,
         plugin.getServer().getPluginManager().registerEvents(panelEditor, plugin);
         plugin.getServer().getPluginManager().registerEvents(jukeboxMenus, plugin);
         plugin.getServer().getPluginManager().registerEvents(gachaMenus, plugin);
+        plugin.getServer().getPluginManager().registerEvents(claw, plugin);
         scanLoadedChunks();
         // Shared animation clock: recompute animated machines on the configured
         // interval and re-send their leaves to viewers (interpolated over it).
@@ -3269,7 +3272,12 @@ public final class MachineManager implements Listener,
                 jukeboxMenus.open(player, m);
                 return;
             }
-            if (mt.isGacha()) {   // no player GUI: the dial is the interface. A parked capsule opens for its puller; admins get the loading menu.
+            if (mt.isGacha()) {   // no player GUI: the lever/dial is the interface. A parked capsule opens for its puller; admins get the loading menu.
+                // a crane in play: any click sends the claw down (claw.drop_on_click)
+                if (mt.gacha().isClaw() && claw.busy(m)) {
+                    if (mt.gacha().claw().dropOnClick()) claw.drop(player, m);
+                    return;
+                }
                 if (gacha.tryOpen(player, m, mt)) return;
                 if (player.hasPermission("machineconstruct.admin") && !player.isSneaking()) gachaMenus.open(player, m);
                 else gacha.hint(player, m, mt);
@@ -3500,7 +3508,7 @@ public final class MachineManager implements Listener,
         if (m == null) return placer;
         { MachineType tt = typeOfMachine(m); if (tt != null && tt.isPanel()) panelIndexDirty = true; }
         for (PacketDisplay d : m.displays()) tracker.unregister(d);
-        gacha.forget(m);
+        claw.forget(m); gacha.forget(m);
         menus.closeFor(m);
         grinderMenus.closeFor(m);
         quarryMenus.closeFor(m);
@@ -3938,7 +3946,7 @@ public final class MachineManager implements Listener,
         // stayed invisible until a /mc reload.
         { MachineType gt = typeOfMachine(m);
           if (gt != null && gt.isGacha()) {
-              try { cues.forget(m); gacha.onRender(m, gt); }
+              try { claw.forget(m); cues.forget(m); gacha.onRender(m, gt); }
               catch (Throwable ex) { plugin.getLogger().warning("[MachineConstruct] capsule render hook failed for " + m.typeId() + ": " + ex); }
           } }
         for (PacketDisplay d : leaves) tracker.register(d);
@@ -3996,7 +4004,14 @@ public final class MachineManager implements Listener,
             if (!t.isGacha()) return;
             String sub = a.substring(6).trim();
             int n = sub.equals("pull") ? 1 : sub.startsWith("pull:") ? Math.max(1, Integer.parseInt(sub.substring(5).trim())) : 0;
-            if (n > 0) gacha.pull(p, m, t, n); else if (sub.equals("menu")) gachaMenus.open(p, m);
+            // on a crane the same button starts the play and then drops the claw
+            if (n > 0 && t.gacha().isClaw()) claw.start(p, m, t);
+            else if (n > 0) gacha.pull(p, m, t, n);
+            else if (sub.equals("menu")) gachaMenus.open(p, m);
+        } else if (a.startsWith("claw:")) {
+            if (t.gacha() != null && t.gacha().isClaw()) {
+                if (a.endsWith(":drop")) claw.drop(p, m); else claw.start(p, m, t);
+            }
         } else if (a.startsWith("cue:")) {   // any machine: fire one of its authored cues
             dev.servereer.machineconstruct.model.anim.Cue c = t.cues().get(a.substring(4).trim());
             if (c != null && !cues.playing(m)) cues.play(m, c, Map.of("player", p.getName()), p, null);
