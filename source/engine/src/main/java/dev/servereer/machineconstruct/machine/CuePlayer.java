@@ -71,7 +71,8 @@ public final class CuePlayer {
     private static final class Tween {
         PacketDisplay d; MTransform from; double start, over; String ease;
         float[] moveTo;            // world-axis translation at the end (null = no move)
-        char axis; double rotBy;   // local rotation (0 = none)
+        char axis; double rotBy;   // rotation (0 = none)
+        float[] axisWorld, pivot;  // set = swing about this pivot instead of spinning on the spot
         double shakeAmp;           // > 0 = jitter
         boolean done;
     }
@@ -82,8 +83,9 @@ public final class CuePlayer {
      * so that the LAST frame is the stop symbol, so a reel always lands where the roll said it would.
      */
     private static final class Reel {
-        PacketDisplay d; double start, over, tease; List<DisplayContent> frames; DisplayContent blur, stop, teaseFrame;
-        int stopIdx; int shown = -2; boolean done;
+        PacketDisplay d; double start, over, tease; List<DisplayContent> frames; DisplayContent blur, stop;
+        MTransform rest; float[] axisWorld;
+        int stopIdx, spins; int shown = -2; boolean done;
     }
 
     /** Fire a cue on a machine. {@code vars} fill {@code {name}} in contents/colours/pitches; {@code actor} gets messages. */
@@ -160,7 +162,13 @@ public final class CuePlayer {
                 tw.from = cur;
                 if (s.moveTo != null) tw.moveTo = r.root.apply((float) s.moveTo[0], (float) s.moveTo[1], (float) s.moveTo[2]);
                 else if (s.moveBy != null) { float[] dv = r.root.rotateVec((float) s.moveBy[0], (float) s.moveBy[1], (float) s.moveBy[2]); tw.moveTo = new float[]{ cur.tx + dv[0], cur.ty + dv[1], cur.tz + dv[2] }; }
-                if (s.rotAxis != null) { tw.axis = s.rotAxis.toLowerCase().charAt(0); tw.rotBy = s.rotBy; }
+                if (s.rotAxis != null) {
+                    tw.axis = s.rotAxis.toLowerCase().charAt(0); tw.rotBy = s.rotBy;
+                    if (s.rotPivot != null) {   // hinge: the axis is the machine's, the pivot a point in model space
+                        tw.axisWorld = r.root.rotateVec(tw.axis == 'x' ? 1 : 0, tw.axis == 'y' ? 1 : 0, tw.axis == 'z' ? 1 : 0);
+                        tw.pivot = r.root.apply((float) s.rotPivot[0], (float) s.rotPivot[1], (float) s.rotPivot[2]);
+                    }
+                }
                 tw.shakeAmp = s.shakeAmp;
                 if (tw.over <= 0) { tw.over = 0.001; }
                 r.tweens.add(tw);
@@ -177,8 +185,10 @@ public final class CuePlayer {
                 rl.stopIdx = si >= 0 ? si : rl.frames.size() - 1;
                 rl.stop = si >= 0 ? rl.frames.get(si) : (stop.isEmpty() ? rl.frames.get(rl.frames.size() - 1) : contentFor(d, stop));
                 rl.blur = s.reelBlur == null || s.reelBlur.isBlank() ? null : contentFor(d, fill(s.reelBlur, r.vars));
-                // the tease frame is the symbol after the stop in the strip — "one click too far"
-                rl.teaseFrame = rl.tease > 0 && !rl.frames.isEmpty() ? rl.frames.get((rl.stopIdx + 1) % rl.frames.size()) : null;
+                rl.spins = s.reelSpins > 0 ? s.reelSpins : Math.max(4, (int) Math.round(rl.over * 2.6));
+                rl.rest = d.transform();
+                char ax = s.reelAxis == null ? 'x' : s.reelAxis.toLowerCase().charAt(0);
+                rl.axisWorld = r.root.rotateVec(ax == 'x' ? 1 : 0, ax == 'y' ? 1 : 0, ax == 'z' ? 1 : 0);
                 r.reels.add(rl);
                 spin(rl, now);
             }
@@ -193,28 +203,47 @@ public final class CuePlayer {
         if (s.message != null && r.actor != null) r.actor.sendMessage(MenuSkin.mini(fill(s.message, r.vars)));
     }
 
-    /** Where the strip is at time {@code now}: blur while it's a smear, then symbols easing out onto the stop. */
+    /**
+     * A drum reel: the part physically TURNS about the machine's axis, decelerating, and its symbol is
+     * swapped while the back face is toward the viewer, so a strip appears to roll past. It always lands
+     * face-on (a whole number of turns) on the symbol the roll already chose. With {@code tease} the last
+     * turn is a separate, much slower one — the reel all but stops on the neighbouring symbol, then rolls
+     * the final notch.
+     */
     private void spin(Reel rl, double now) {
-        double u = Math.min(1.0, (now - rl.start) / rl.over);
+        double t = now - rl.start;
         int n = rl.frames.size();
-        if (u >= 1.0) { show(rl, rl.stop, -1); rl.done = true; return; }
-        double teaseU = rl.tease > 0 ? Math.max(0, 1 - rl.tease / rl.over) : 1;   // the last `tease` seconds sit one past the stop
-        if (rl.teaseFrame != null && u >= teaseU) { show(rl, rl.teaseFrame, -3); return; }
-        double span = rl.teaseFrame != null ? teaseU : 1.0;
-        double p = 1 - Math.pow(1 - u / span, 3);          // ease-out cubic: fast, then crawling
-        int turns = Math.max(6, (int) Math.round(rl.over * 9));   // total frames the strip travels
-        int frame = (int) Math.floor(p * turns);
-        double speed = 3 * Math.pow(1 - u / span, 2) * turns / rl.over;   // frames per second right now
-        if (rl.blur != null && speed > 11) { show(rl, rl.blur, -4); return; }
-        // line the strip up so frame `turns` IS the stop symbol
-        int idx = ((rl.stopIdx - (turns - frame)) % n + n) % n;
-        show(rl, rl.frames.get(idx), idx);
+        double full = 360.0 * rl.spins;
+        double angle, speed;   // degrees, degrees per second
+        if (t >= rl.over) { angle = full; speed = 0; }
+        else if (rl.tease > 0 && t > rl.over - rl.tease) {          // the last notch, crawling
+            double u = (t - (rl.over - rl.tease)) / rl.tease;
+            double e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;   // ease in-out
+            angle = full - 360 + 360 * e;
+            speed = 360 / rl.tease;
+        } else {
+            double span = rl.over - Math.max(0, rl.tease);
+            double u = Math.min(1, t / span);
+            double target = rl.tease > 0 ? full - 360 : full;
+            angle = target * (1 - Math.pow(1 - u, 3));                          // ease-out cubic
+            speed = 3 * Math.pow(1 - u, 2) * target / span;
+        }
+        rl.d.forceTransform(rl.rest.rotatedAbout(rl.axisWorld[0], rl.axisWorld[1], rl.axisWorld[2], angle, rl.rest.tx, rl.rest.ty, rl.rest.tz));
+        // one strip step per full turn — the swap happens while the back face is showing
+        int k = (int) Math.floor((angle + 180) / 360);
+        if (rl.blur != null && speed > 900) show(rl, rl.blur, -4);
+        else {
+            int idx = ((rl.stopIdx - (rl.spins - k)) % n + n) % n;
+            show(rl, k >= rl.spins ? rl.stop : rl.frames.get(idx), k >= rl.spins ? -1 : idx);
+        }
+        rl.d.consumeDirty(); tracker.refresh(rl.d, 0);
+        if (t >= rl.over) rl.done = true;
     }
 
     private void show(Reel rl, DisplayContent c, int tag) {
         if (rl.shown == tag) return;   // same frame as last tick (blur, a held symbol) — don't spam the packet
         rl.shown = tag;
-        rl.d.forceContent(c); rl.d.consumeDirty(); tracker.refresh(rl.d, 0);
+        rl.d.forceContent(c);
     }
 
     private static int indexOfSymbol(List<String> symbols, String stop, Map<String, String> vars) {
@@ -232,7 +261,11 @@ public final class CuePlayer {
         };
         MTransform t = tw.from;
         if (tw.moveTo != null) t = t.at((float) (tw.from.tx + (tw.moveTo[0] - tw.from.tx) * e), (float) (tw.from.ty + (tw.moveTo[1] - tw.from.ty) * e), (float) (tw.from.tz + (tw.moveTo[2] - tw.from.tz) * e));
-        if (tw.rotBy != 0) t = t.rotatedLocal(tw.axis, tw.rotBy * e);
+        if (tw.rotBy != 0) {
+            t = tw.pivot != null
+                    ? t.rotatedAbout(tw.axisWorld[0], tw.axisWorld[1], tw.axisWorld[2], tw.rotBy * e, tw.pivot[0], tw.pivot[1], tw.pivot[2])
+                    : t.rotatedLocal(tw.axis, tw.rotBy * e);
+        }
         if (tw.shakeAmp > 0 && u < 1.0) {
             float a = (float) (tw.shakeAmp * (1 - u));
             t = t.translated((rng.nextFloat() * 2 - 1) * a, (rng.nextFloat() * 2 - 1) * a * 0.5f, (rng.nextFloat() * 2 - 1) * a);

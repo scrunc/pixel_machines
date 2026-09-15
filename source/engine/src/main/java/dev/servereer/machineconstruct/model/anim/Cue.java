@@ -23,7 +23,8 @@ import java.util.Map;
  *     - { at: 0.4, part: capsule,  show: true, content: "{capsule}" }
  *     - { at: 0.4, part: capsule,  move: { from: [0, 1.1, -0.2], to: [0, 0.32, -0.42], over: 0.9, ease: in } }
  *     - { at: 1.3, part: flap,     glow: "{color}" }
- *     - { at: 0.3, part: reel_3,   reel: { symbols: [ "eyJ…", "eyJ…" ], stop: "{sym3}", over: 2.8, blur: "eyJ…", tease: 0.5 } }
+ *     - { at: 0.3, part: reel_3,   reel: { symbols: [ "eyJ…", "eyJ…" ], stop: "{sym3}", over: 2.8, blur: "eyJ…", tease: 0.5, spins: 9 } }
+ *     - { at: 0.0, part: lever,     rotate: { axis: x, by: 70, over: 0.3, pivot: [-0.5, 1.4, 0.0] } }   # hinges on its mount, not a spin in place
  *     - { at: 1.4, particle: { type: end_rod, count: 20, offset: [0, 0.35, -0.42], speed: 0.05 } }
  * </pre>
  * Part selectors: a name, {@code a|b|c}, or a glob with {@code *}. Positions are model space relative
@@ -42,14 +43,15 @@ public final class Cue {
         public boolean keep;              // leave the part where the step put it when the cue ends
         // tweens (seconds)
         public double[] moveFrom, moveTo, moveBy; public double moveOver; public String ease = "linear";
-        public String rotAxis; public double rotBy, rotOver;         // rotate: degrees about a local axis
+        public String rotAxis; public double rotBy, rotOver;         // rotate: degrees about an axis
+        public double[] rotPivot;   // rotate about a point in model space (a lever's mount) instead of the part's centre
         public double shakeAmp, shakeOver;                            // shake: jitter
         public String glow;               // "#rrggbb" outline colour, "" / "off" = none
         public String sound; public float volume = 1f; public String pitch = "1";   // pitch may be a {var}
         public String particle; public int count; public double[] pOffset, pSpread; public double pSpeed;
         public String message;            // skinned message to the actor (MiniMessage, {vars})
         // reel: a slot reel — the player generates the frames (blur while fast, symbols easing out, landing on `stop`)
-        public List<String> reelSymbols; public String reelStop, reelBlur; public double reelOver, reelTease;
+        public List<String> reelSymbols; public String reelStop, reelBlur, reelAxis; public double reelOver, reelTease; public int reelSpins;
 
         public boolean isReel() { return reelSymbols != null && !reelSymbols.isEmpty(); }
 
@@ -106,6 +108,7 @@ public final class Cue {
             s.rotAxis = str(rot.get("axis")) == null ? "y" : str(rot.get("axis"));
             s.rotBy = rot.containsKey("turns") ? num(rot.get("turns"), 1) * 360.0 : num(rot.get("by"), 90);
             s.rotOver = num(rot.get("over"), 0.5);
+            s.rotPivot = vec(rot.get("pivot"));
             if (rot.get("ease") != null) s.ease = str(rot.get("ease"));
         }
         if (m.get("shake") instanceof Map<?, ?> sh) { s.shakeAmp = num(sh.get("amplitude"), 0.03); s.shakeOver = num(sh.get("over"), 0.5); }
@@ -117,6 +120,8 @@ public final class Cue {
             s.reelBlur = str(re.get("blur"));
             s.reelOver = num(re.get("over"), 2.0);
             s.reelTease = num(re.get("tease"), 0);
+            s.reelSpins = (int) num(re.get("spins"), 0);
+            s.reelAxis = str(re.get("axis")) == null ? "x" : str(re.get("axis"));
         }
         if (m.containsKey("glow")) s.glow = m.get("glow") == null ? "" : String.valueOf(m.get("glow"));
         if (m.containsKey("lit")) s.glow = m.get("lit") == null ? "" : String.valueOf(m.get("lit"));
