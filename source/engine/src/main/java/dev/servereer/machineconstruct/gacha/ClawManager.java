@@ -113,7 +113,7 @@ public final class ClawManager implements Listener {
         p.sendMessage(GachaManager.msg(sk, "claw_start",
                 "<aqua>WASD moves the claw <dark_gray>·<aqua> Space or click drops it. <gray>It holds about {pct} times in 100.",
                 MenuSkin.vars("pct", String.valueOf(Math.round(ss.claw.holdChance() * 100)))));
-        sound(ss, "block.copper_bulb.turn_on", 0.7f, 1.3f);
+        sfx(ss, "claw_start", "block.copper_bulb.turn_on", 0.7f, 1.3f);
         return true;
     }
 
@@ -122,7 +122,7 @@ public final class ClawManager implements Listener {
         Session ss = sessions.get(m);
         if (ss == null || !ss.player.equals(p.getUniqueId()) || ss.phase != Phase.DRIVE) return ss != null;
         ss.phase = Phase.DROP; ss.phaseStart = now();
-        sound(ss, "block.piston.extend", 0.8f, 1.4f);
+        sfx(ss, "claw_drop", "block.piston.extend", 0.8f, 1.4f);
         return true;
     }
 
@@ -266,7 +266,7 @@ public final class ClawManager implements Listener {
                 ss.x += (ss.wantX - ss.x) * 0.35;   // the gantry catches up rather than snapping
                 ss.z += (ss.wantZ - ss.z) * 0.35;
                 drawGantry(ss, c.cable());
-                if (now > ss.deadline) { ss.phase = Phase.DROP; ss.phaseStart = now; sound(ss, "block.piston.extend", 0.8f, 1.4f); }
+                if (now > ss.deadline) { ss.phase = Phase.DROP; ss.phaseStart = now; sfx(ss, "claw_drop", "block.piston.extend", 0.8f, 1.4f); }
             }
             case DROP -> {
                 double u = Math.min(1, t / DROP_S);
@@ -274,8 +274,8 @@ public final class ClawManager implements Listener {
                 ss.open = Math.min(1, 0.25 + fall * 1.5);        // the prongs spread as it goes down, wide before it lands
                 // eased at BOTH ends: the winch takes up the slack, runs, and sets the claw down rather than slamming it
                 drawGantry(ss, c.cable() + (c.top() - c.floor() - c.cable()) * smooth(fall));
-                if (!ss.landed && fall >= 1) { ss.landed = true; sound(ss, "block.chain.place", 0.7f, 0.9f); }
-                if (u >= 1) { ss.phase = Phase.CLOSE; ss.phaseStart = now; decide(ss); sound(ss, "block.iron_trapdoor.close", 0.8f, 0.8f); }
+                if (!ss.landed && fall >= 1) { ss.landed = true; sfx(ss, "claw_land", "block.chain.place", 0.7f, 0.9f); }
+                if (u >= 1) { ss.phase = Phase.CLOSE; ss.phaseStart = now; decide(ss); sfx(ss, "claw_close", "block.iron_trapdoor.close", 0.8f, 0.8f); }
             }
             case CLOSE -> {
                 double u = Math.min(1, t / CLOSE_S);
@@ -284,7 +284,7 @@ public final class ClawManager implements Listener {
                 if (u >= 1) {
                     ss.phase = Phase.LIFT; ss.phaseStart = now;
                     if (ss.grabbed || !"miss".equals(ss.failMode)) carry(ss, true);   // a miss comes up with nothing
-                    sound(ss, "block.chain.hit", 0.7f, 1.1f);
+                    sfx(ss, "claw_lift", "block.chain.hit", 0.7f, 1.1f);
                 }
             }
             case LIFT -> {
@@ -301,7 +301,7 @@ public final class ClawManager implements Listener {
                 ss.z = ss.z + (c.chuteZ() - ss.z) * Math.min(1, e * 1.05);
                 drawGantry(ss, c.cable());
                 if (!ss.grabbed && "slip_late".equals(ss.failMode) && u >= 0.72) { slip(ss); return; }
-                if (u >= 1) { ss.phase = Phase.RELEASE; ss.phaseStart = now; sound(ss, "block.bamboo_wood_trapdoor.open", 0.8f, 1.5f); }
+                if (u >= 1) { ss.phase = Phase.RELEASE; ss.phaseStart = now; sfx(ss, "claw_release", "block.bamboo_wood_trapdoor.open", 0.8f, 1.5f); }
             }
             case RELEASE -> {
                 double u = Math.min(1, t / RELEASE_S);
@@ -381,8 +381,8 @@ public final class ClawManager implements Listener {
 
     /** It had it, and lost it: the prongs sag, the prize falls back into the pile. */
     private void slip(Session ss) {
-        sound(ss, "entity.item.pickup", 0.5f, 0.6f);
-        sound(ss, "block.bamboo_wood_trapdoor.open", 0.7f, 0.9f);
+        sfx(ss, "claw_slip", "entity.item.pickup", 0.5f, 0.6f);
+        sfx(ss, "claw_slip_open", "block.bamboo_wood_trapdoor.open", 0.7f, 0.9f);
         ss.phase = Phase.RELEASE; ss.phaseStart = now(); ss.releaseAt = 0;
         ss.grabbed = false;
         // let it fall from wherever the claw is to the top of the pile, then shake what it lands on
@@ -403,7 +403,7 @@ public final class ClawManager implements Listener {
                             : "<gray>It slipped.",
                     MenuSkin.vars("left", String.valueOf(left))));
         }
-        sound(ss, "block.stone_button.click_off", 0.8f, 0.7f);
+        sfx(ss, "claw_miss", "block.stone_button.click_off", 0.8f, 0.7f);
     }
 
     private void payOut(Session ss) {
@@ -412,7 +412,7 @@ public final class ClawManager implements Listener {
         Player p = plugin.getServer().getPlayer(ss.player);
         if (p == null || ss.prize == null) return;
         gacha.deliverOne(ss.m, ss.t, p, ss.prize);
-        sound(ss, "entity.player.levelup", 0.8f, 1.2f);
+        sfx(ss, "claw_win", "entity.player.levelup", 0.8f, 1.2f);
     }
 
     // --- drawing -----------------------------------------------------------------
@@ -549,14 +549,13 @@ public final class ClawManager implements Listener {
         ss.taken = null; ss.nearest = null;
         if (was == null) { empty.remove(d); return; }
         Machine m = ss.m;
+        GachaSpec spec = ss.spec;
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             empty.remove(d);
             if (!m.displays().contains(d)) return;   // the machine was picked up or re-rendered in the meantime
             d.forceContent(was); d.consumeDirty(); tracker.refresh(d, 0);
-            try {
-                Location at = m.anchor().clone().add(0.5, 1.3, 0.5);
-                at.getWorld().playSound(at, "entity.item.pickup", 0.4f, 0.7f);
-            } catch (Throwable ignored) { }
+            gacha.sfx(m, spec, "restock", m.anchor().clone().add(0.5, 1.3, 0.5),
+                    Sfx.one("entity.item.pickup", 0.4, "0.7"), null);
         }, Math.max(1, delayTicks));
     }
 
@@ -616,6 +615,15 @@ public final class ClawManager implements Listener {
 
     /** A display's position back in model space (0.5 = the anchor column), whatever way the machine faces. */
     private float[] modelOf(Session ss, MTransform t) { return ss.inv.apply(t.tx, t.ty, t.tz); }
+
+    /**
+      * A named noise. The key/volume/pitch passed here are the DEFAULT — what the claw sounds like when the
+      * machine's file says nothing — and `sfx: { <event>: … }` in that file replaces it. See {@link Sfx}.
+      */
+    private void sfx(Session ss, String event, String key, float vol, float pitch) {
+        gacha.sfx(ss.m, ss.spec, event, ss.m.anchor().clone().add(0.5, 1.0, 0.5),
+                Sfx.one(key, vol, String.valueOf(pitch)), null);
+    }
 
     private void sound(Session ss, String key, float vol, float pitch) {
         Location at = ss.m.anchor().clone().add(0.5, 1.0, 0.5);

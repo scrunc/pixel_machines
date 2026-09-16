@@ -269,6 +269,30 @@ every guarantee at or below it and ticks the rest up. The old single form (`pity
 still works, and old files keep their counter (it migrates into the ladder on the next pull). The
 odds screen lists what each guarantee owes that player right now.
 
+**What a machine sounds like (`sfx:`)** — every noise the engine makes is a named EVENT, and a machine's
+`sfx:` block rebinds any of them. Leave one out and it keeps the engine's default, so a machine with no
+`sfx:` block sounds exactly as it always did.
+
+```yaml
+sfx:
+  insert:                                  # one layer
+    all: true                              # ...or several: `all` plays them together
+    layers:                                # without `all`, ONE is picked, by `weight`
+      - { sound: block.amethyst_block.chime, volume: 0.6, pitch: [1.4, 1.7] }
+      - { sound: entity.item.pickup, volume: 0.4, pitch: 0.8, delay: 2 }
+  reveal: { sound: entity.experience_orb.pickup, pitch: "{pitch}" }   # the rarity's own pitch
+  jackpot: { track: fanfare, distance: 24 }                           # a real audio file, via PixelAudio
+  open: off                                                           # silence this one outright
+```
+
+Per layer: `sound` (a vanilla key, or `{sound}` for the rarity's), `track` (a track id from the music
+library, streamed through PixelAudio at `distance` blocks — this is the hook for custom audio), `volume`,
+`pitch` (a number, a `[min, max]` range rolled per play, or a `{var}`), `delay` in ticks, `chance` 0–1, and
+`weight` for the random pick. Events: `insert` · `denied` · `land` · `open` · `reveal` · `jackpot`, plus the
+claw's `claw_start` · `claw_drop` · `claw_land` · `claw_close` · `claw_lift` · `claw_release` · `claw_win` ·
+`claw_miss` · `claw_slip` · `claw_slip_open` · `restock`. Sounds written as cue steps still work and are
+unaffected — `sfx:` is for the moments the ENGINE owns, cues for the ones the animation does.
+
 **Switching guarantees off**: `pity: false` (or an empty list, or no key at all) and the machine is pure
 chance — nothing is ever owed, and every countdown disappears with it. On a claw, `pity_grabs: 0` does the
 same for the forced hold.

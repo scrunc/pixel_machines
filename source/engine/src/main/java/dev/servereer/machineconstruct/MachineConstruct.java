@@ -118,6 +118,8 @@ public final class MachineConstruct extends JavaPlugin implements MachineConstru
         // P2 chest-anchor lifecycle + P3 model rendering (via the registries below).
         machines = new MachineManager(this, tracker, this, animationInterval, processInterval,
                 trackLibrary, playlistLibrary, musicPlayer, discItem);
+        // machines may play real audio files as sound effects (`sfx: { track: … }`), not only vanilla keys
+        machines.gacha().useAudio(trackLibrary, musicAudio);
         machines.start();
 
         // PixelProfiler shop-price bridge: prefer /shop's sell price for auto-sell/vault value,

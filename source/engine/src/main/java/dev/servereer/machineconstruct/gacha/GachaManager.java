@@ -63,7 +63,53 @@ public final class GachaManager {
     private final Map<Machine, Long> lastBroadcast = new HashMap<>();
     private final Map<Machine, List<PacketDisplay>> boards = new HashMap<>();   // the per-viewer "your luck" text parts
     private final Coins coins;
+    /** The music library + audio core, for `sfx: { track: … }` — null until the engine wires them. */
+    private dev.servereer.machineconstruct.music.TrackLibrary tracks;
+    private dev.servereer.machineconstruct.audio.MusicAudio audio;
     public Coins coins() { return coins; }
+
+    /** Let machines play real audio files as sound effects, not only vanilla keys. */
+    public void useAudio(dev.servereer.machineconstruct.music.TrackLibrary tracks, dev.servereer.machineconstruct.audio.MusicAudio audio) {
+        this.tracks = tracks; this.audio = audio;
+    }
+
+    /**
+     * Make the noise a machine binds to {@code event}. {@code dflt} is what the engine would do if the file
+     * says nothing — so every call site reads as "this is the sound, unless the machine disagrees".
+     */
+    public void sfx(Machine m, GachaSpec spec, String event, Location at, Sfx.Event dflt, Map<String, String> vars) {
+        if (spec == null || at == null) return;
+        Sfx.Event e = spec.sfx() == null ? dflt : spec.sfx().event(event, dflt);
+        Sfx.play(plugin, at, e, vars, (track, layer) -> playTrack(track, at, layer.distance(), layer.volume()));
+    }
+
+    /** Convenience for the common case: one vanilla key at a machine's centre. */
+    public void sfx(Machine m, GachaSpec spec, String event, String sound, double volume, double pitch) {
+        sfx(m, spec, event, m.anchor().clone().add(0.5, 1.0, 0.5), Sfx.one(sound, volume, String.valueOf(pitch)), null);
+    }
+
+    /**
+     * A track from the music library, played once at a point through PixelAudio. Decoding is ffmpeg work, so
+     * the first play of a clip loads on a worker thread and starts a tick later; after that the library's
+     * cache makes it immediate.
+     */
+    private void playTrack(String id, Location at, float distance, float volume) {
+        if (tracks == null || audio == null || !audio.available() || at.getWorld() == null) return;
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            dev.servereer.machineconstruct.audio.MusicAudio.Clip clip = tracks.loadTrack(id);
+            if (clip == null) return;
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                double[] pos = {0};
+                audio.startLocational(at.getWorld(), at.getX(), at.getY(), at.getZ(), distance, () -> {
+                    short[] out = new short[dev.servereer.machineconstruct.audio.MusicAudio.FRAME_SAMPLES];
+                    if (!clip.fill(out, pos[0], 1.0)) return null;          // null ends the stream
+                    pos[0] += out.length;
+                    if (volume < 0.999f) for (int i = 0; i < out.length; i++) out[i] = (short) (out[i] * volume);
+                    return out;
+                }, null);
+            });
+        });
+    }
     private final Random rng = new Random();
 
     public GachaManager(Plugin plugin, CuePlayer cues, Supplier<EconomyBridge> economy, Host host) {
@@ -192,7 +238,12 @@ public final class GachaManager {
         GachaSeries s = series(spec);
         if (s.loot().isEmpty()) { p.sendMessage(msg(sk, "empty", "<red>This machine has nothing loaded yet.")); return false; }
         count = Math.max(1, count);
-        if (!charge(p, spec, sk, count)) return false;
+        Location centre = m.anchor().clone().add(0.5, 1.0, 0.5);
+        if (!charge(p, spec, sk, count)) {
+            sfx(m, spec, "denied", centre, Sfx.one("block.note_block.bass", 0.7, "0.6"), null);
+            return false;
+        }
+        sfx(m, spec, "insert", centre, Sfx.one("block.amethyst_block.chime", 0.6, "1.4~1.7"), null);
         List<Result> results = new ArrayList<>();
         GachaSeries.Record rec = s.record(p.getUniqueId());
         for (int i = 0; i < count; i++) {
@@ -214,6 +265,7 @@ public final class GachaManager {
             cues.play(m, pullCue, vars, p, () -> open(m, t, nw, p));
         } else {
             cues.play(m, pullCue, vars, p, () -> {
+                sfx(m, spec, "land", centre, Sfx.one("block.copper_bulb.turn_on", 0.7, "1.2"), vars);
                 if (waiting.get(m) == nw) p.sendMessage(msg(sk, "landed", spec.show().rarity()
                         ? "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it."
                         : "<aqua>A capsule landed — right-click the flap to open it.", vars));
@@ -244,6 +296,8 @@ public final class GachaManager {
         Map<String, String> vars = vars(opener, spec, first);
         Map<String, DisplayContent> objects = new HashMap<>();
         objects.put("prize", new ItemContent(first.entry().shown(), ItemContent.context("fixed")));
+        sfx(m, spec, "open", m.anchor().clone().add(0.5, 1.0, 0.5),
+                Sfx.one("block.barrel.open", 0.7, "1.3"), vars);
         Cue reveal = t.cues().get("reveal");
         cues.play(m, reveal != null ? reveal : t.cues().get("open"), vars, objects, opener, () -> deliver(m, t, w));
     }
@@ -284,7 +338,16 @@ public final class GachaManager {
                         : "<aqua>✦ <white>{name}</white>", vars(p, spec, r)));
             } else host.showResults(p, m, w.results);
         }
-        if (best != null && spec.broadcastMin() != null && spec.rank(best.rarity().name()) >= spec.rank(spec.broadcastMin())) broadcast(m, t, w, best);
+        if (best != null) {
+            Map<String, String> bv = vars(p, spec, best);
+            sfx(m, spec, "reveal", m.anchor().clone().add(0.5, 1.0, 0.5),
+                    Sfx.one("entity.experience_orb.pickup", 0.8, "{pitch}"), bv);
+            if (spec.broadcastMin() != null && spec.rank(best.rarity().name()) >= spec.rank(spec.broadcastMin())) {
+                sfx(m, spec, "jackpot", m.anchor().clone().add(0.5, 1.0, 0.5),
+                        Sfx.one("ui.toast.challenge_complete", 0.9, "1"), bv);
+                broadcast(m, t, w, best);
+            }
+        }
     }
 
     private void give(Player p, ItemStack item, Location drop) {

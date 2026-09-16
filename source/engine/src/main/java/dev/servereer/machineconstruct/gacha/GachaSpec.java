@@ -78,6 +78,7 @@ public final class GachaSpec {
     private final Material priceItem; private final int priceAmount;
     private final List<Pity> pity;
     private final Show show;
+    private final Sfx sfx;
     private final int multi;
     private final int openAfter;
     private final String broadcastMin; private final double broadcastRadius;
@@ -86,11 +87,11 @@ public final class GachaSpec {
     private final String seedCrate;   // gacha.seed_crate — an ExcellentCrates crate id whose rewards fill the series once
     private final Map<String, Rarity> rarities;
 
-    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity, Show show,
+    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity, Show show, Sfx sfx,
                       int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate, ClawSpec claw) {
         this.seedCrate = seedCrate; this.claw = claw;
         this.series = series; this.title = title; this.style = style; this.priceMoney = priceMoney; this.priceCoins = priceCoins; this.coinTier = coinTier; this.priceItem = priceItem; this.priceAmount = priceAmount;
-        this.pity = pity; this.show = show; this.multi = multi; this.openAfter = openAfter;
+        this.pity = pity; this.show = show; this.sfx = sfx; this.multi = multi; this.openAfter = openAfter;
         this.broadcastMin = broadcastMin; this.broadcastRadius = broadcastRadius;
         this.hidden = Collections.unmodifiableList(hidden); this.rarities = Collections.unmodifiableMap(rarities);
     }
@@ -132,7 +133,7 @@ public final class GachaSpec {
         String styleName = sec.getString("style", "capsule");
         Style style = "reels".equalsIgnoreCase(styleName) ? Style.REELS
                 : "claw".equalsIgnoreCase(styleName) ? Style.CLAW : Style.CAPSULE;
-        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Show.parse(sec.getConfigurationSection("show")), Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
+        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Show.parse(sec.getConfigurationSection("show")), Sfx.parse(sec.getConfigurationSection("sfx")), Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
                 bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"), ClawSpec.parse(sec.getConfigurationSection("claw")));
     }
 
@@ -149,6 +150,9 @@ public final class GachaSpec {
     public String coinTier() { return coinTier; }
     public Material priceItem() { return priceItem; }
     public int priceAmount() { return priceAmount; }
+    /** What this machine SOUNDS like — every event it rebinds. See {@link Sfx}. */
+    public Sfx sfx() { return sfx; }
+
     /** What this machine tells a player about itself. */
     public Show show() { return show; }
     /** Every guarantee this machine carries, in file order. */
