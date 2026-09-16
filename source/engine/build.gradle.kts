@@ -14,6 +14,13 @@ repositories {
 }
 
 dependencies {
+    // PixelAudio (plugin_customized/pixelaudio) — the SHARED Simple Voice Chat core this plugin's music
+    // system plays through; it carries no audio core of its own any more. compileOnly + a plugin
+    // `softdepend`: resolved at runtime from PixelAudio's OWN classloader (never bundled), so both
+    // plugins share the exact same types and SVC's one-shot server API stays with a plugin that is never
+    // reloaded. Built outside this build, so it is consumed as a file — run `./gradlew jar` in
+    // plugin_customized/pixelaudio/source if the jar is stale.
+    compileOnly(files(rootProject.projectDir.resolve("../../pixelaudio/source/build/libs/PixelAudio-0.1.0.jar")))
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")   // 1.21.11: PlayerInputEvent (the claw reads WASD like ArcadeCab)
     // Server-provided packetevents (plugin `depend`), compiled against the exact
     // runtime version (2.12.1) so there is no API drift. Not shaded — a second

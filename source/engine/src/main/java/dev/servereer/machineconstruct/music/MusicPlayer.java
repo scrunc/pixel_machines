@@ -1,7 +1,6 @@
 package dev.servereer.machineconstruct.music;
 
-import dev.servereer.machineconstruct.audio.AudioTrack;
-import dev.servereer.machineconstruct.audio.VoiceChatAudio;
+import dev.servereer.machineconstruct.audio.MusicAudio;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -53,14 +52,14 @@ public final class MusicPlayer implements Listener {
         int orderPos;
         Runnable onEnd;              // whole queue finished (non-loop)
         // runtime
-        AudioTrack track;            // current decoded track
+        MusicAudio.Clip track;            // current decoded track
         double startSample;          // source-sample offset this segment starts from (seek/pause anchor)
         double speed = 1.0;          // playback speed (1.0 = normal; >1 faster + higher pitch)
         long startedAt;              // millis this segment's handles began
         boolean paused;
         int epoch;                   // bumped on stop/advance/pause to void stale async starts
-        VoiceChatAudio.Handle single;                   // LOCATIONAL / PERSONAL
-        final Map<UUID, VoiceChatAudio.Handle> radio = new HashMap<>();
+        MusicAudio.Handle single;                   // LOCATIONAL / PERSONAL
+        final Map<UUID, MusicAudio.Handle> radio = new HashMap<>();
         BukkitTask advanceTask;
 
         Session(String key, Mode mode) { this.key = key; this.mode = mode; }
@@ -70,11 +69,11 @@ public final class MusicPlayer implements Listener {
 
     private final JavaPlugin plugin;
     private final TrackLibrary library;
-    private final VoiceChatAudio audio;   // null if voicechat absent
+    private final MusicAudio audio;   // null if voicechat absent
 
     private final Map<String, Session> sessions = new HashMap<>();
 
-    public MusicPlayer(JavaPlugin plugin, TrackLibrary library, VoiceChatAudio audio) {
+    public MusicPlayer(JavaPlugin plugin, TrackLibrary library, MusicAudio audio) {
         this.plugin = plugin;
         this.library = library;
         this.audio = audio;
@@ -117,7 +116,7 @@ public final class MusicPlayer implements Listener {
     public long positionMs(String key) {
         Session s = sessions.get(key);
         if (s == null || s.track == null) return 0;
-        return (long) (currentSample(s) * 1000.0 / AudioTrack.SAMPLE_RATE);
+        return (long) (currentSample(s) * 1000.0 / MusicAudio.SAMPLE_RATE);
     }
     /** Length of the playing track, in milliseconds (0 if none). */
     public long trackLengthMs(String key) {
@@ -177,7 +176,7 @@ public final class MusicPlayer implements Listener {
         if (id == null) { endSession(s); if (result != null) result.accept(false); return; }
         final int epoch = s.epoch;
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            AudioTrack track = library.loadTrack(id);
+            MusicAudio.Clip track = library.loadTrack(id);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (sessions.get(s.key) != s || s.epoch != epoch) { if (result != null) result.accept(false); return; }
                 if (track == null) {   // bad track — skip to the next one
@@ -206,7 +205,7 @@ public final class MusicPlayer implements Listener {
             }
             case RADIO -> {
                 for (Player p : plugin.getServer().getOnlinePlayers()) {
-                    VoiceChatAudio.Handle h = audio.startStatic(p, supplierFrom(s.track, s.startSample, s.speed), null);
+                    MusicAudio.Handle h = audio.startStatic(p, supplierFrom(s.track, s.startSample, s.speed), null);
                     if (h != null) s.radio.put(p.getUniqueId(), h);
                 }
             }
@@ -215,14 +214,14 @@ public final class MusicPlayer implements Listener {
     }
 
     /** A per-handle supplier from {@code startSample}, advancing {@code speed} source samples per output sample. */
-    private static Supplier<short[]> supplierFrom(AudioTrack track, double startSample, double speed) {
+    private static Supplier<short[]> supplierFrom(MusicAudio.Clip track, double startSample, double speed) {
         double[] pos = { startSample };
         double step = speed <= 0 ? 1.0 : speed;
         return () -> {
             if (pos[0] >= track.totalSamples()) return null;
-            short[] out = new short[AudioTrack.FRAME_SAMPLES];
+            short[] out = new short[MusicAudio.FRAME_SAMPLES];
             track.fill(out, pos[0], step);
-            pos[0] += AudioTrack.FRAME_SAMPLES * step;
+            pos[0] += MusicAudio.FRAME_SAMPLES * step;
             return out;
         };
     }
@@ -232,14 +231,14 @@ public final class MusicPlayer implements Listener {
         if (s.track == null) return 0;
         if (s.paused) return s.startSample;
         double elapsedSec = (System.currentTimeMillis() - s.startedAt) / 1000.0;
-        return s.startSample + elapsedSec * AudioTrack.SAMPLE_RATE * s.speed;
+        return s.startSample + elapsedSec * MusicAudio.SAMPLE_RATE * s.speed;
     }
 
     /** Fire the advance timer at the current track's remaining wall-clock duration (speed-adjusted, + a gap). */
     private void scheduleAdvance(Session s) {
         cancelAdvance(s);
         double remainingSamples = Math.max(0, s.track.totalSamples() - s.startSample);
-        long remainingMs = (long) (remainingSamples / (AudioTrack.SAMPLE_RATE * Math.max(0.1, s.speed)) * 1000.0);
+        long remainingMs = (long) (remainingSamples / (MusicAudio.SAMPLE_RATE * Math.max(0.1, s.speed)) * 1000.0);
         long ticks = Math.max(1, (remainingMs + 200) / 50);   // +200 ms so the tail isn't clipped
         final int epoch = s.epoch;
         s.advanceTask = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
@@ -268,7 +267,7 @@ public final class MusicPlayer implements Listener {
         Session s = sessions.get(key);
         if (s == null || s.track == null) return false;
         double cur = currentSample(s);
-        double delta = deltaMs / 1000.0 * AudioTrack.SAMPLE_RATE;   // seek in source time
+        double delta = deltaMs / 1000.0 * MusicAudio.SAMPLE_RATE;   // seek in source time
         reseat(s, cur + delta);
         return true;
     }
@@ -363,7 +362,7 @@ public final class MusicPlayer implements Listener {
         if (id == null) { endSession(s); return; }
         final int epoch = s.epoch;
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            AudioTrack track = library.loadTrack(id);
+            MusicAudio.Clip track = library.loadTrack(id);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (sessions.get(s.key) != s || s.epoch != epoch) return;
                 if (track == null) { if (advanceIndex(s)) startCurrentPaused(s); else endSession(s); return; }
@@ -379,7 +378,7 @@ public final class MusicPlayer implements Listener {
         Session s = sessions.get(RADIO_KEY);
         if (s == null || s.paused || s.track == null) return;
         double pos = currentSample(s);
-        VoiceChatAudio.Handle h = audio.startStatic(e.getPlayer(), supplierFrom(s.track, pos, s.speed), null);
+        MusicAudio.Handle h = audio.startStatic(e.getPlayer(), supplierFrom(s.track, pos, s.speed), null);
         if (h != null) s.radio.put(e.getPlayer().getUniqueId(), h);
     }
 
@@ -387,7 +386,7 @@ public final class MusicPlayer implements Listener {
     public void onQuit(PlayerQuitEvent e) {
         UUID uid = e.getPlayer().getUniqueId();
         Session radio = sessions.get(RADIO_KEY);
-        if (radio != null) { VoiceChatAudio.Handle h = radio.radio.remove(uid); if (h != null) h.stop(); }
+        if (radio != null) { MusicAudio.Handle h = radio.radio.remove(uid); if (h != null) h.stop(); }
         stop("personal:" + uid);   // their private stream ends with them
     }
 
@@ -400,7 +399,7 @@ public final class MusicPlayer implements Listener {
 
     private void stopHandles(Session s) {
         if (s.single != null) { s.single.stop(); s.single = null; }
-        for (VoiceChatAudio.Handle h : s.radio.values()) h.stop();
+        for (MusicAudio.Handle h : s.radio.values()) h.stop();
         s.radio.clear();
     }
 

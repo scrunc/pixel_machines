@@ -86,19 +86,24 @@ public final class MachineConstruct extends JavaPlugin implements MachineConstru
 
         // Music subsystem (ADR 0024): track library + Simple Voice Chat playback + custom discs.
         dev.servereer.machineconstruct.audio.TrackIngest ingest = new dev.servereer.machineconstruct.audio.TrackIngest(this);
-        trackLibrary = new dev.servereer.machineconstruct.music.TrackLibrary(this, ingest);
+        // Audio comes from the shared PixelAudio plugin — this engine carries no SVC bridge of its own.
+        // Only reach for its types once the plugin is enabled: they live in ITS classloader.
+        dev.servereer.machineconstruct.audio.MusicAudio musicAudio = null;
+        if (getServer().getPluginManager().isPluginEnabled("PixelAudio"))
+            musicAudio = dev.servereer.machineconstruct.audio.PixelAudioMusic.load(this);
+        if (musicAudio == null) {
+            String why = getServer().getPluginManager().getPlugin("PixelAudio") == null
+                    ? "PixelAudio not installed — jukeboxes/music will save tracks but play silently."
+                    : "PixelAudio has not published its audio service — music will play silently.";
+            getLogger().info(why);
+            musicAudio = new dev.servereer.machineconstruct.audio.MusicAudio.MusicPlayerless(why);
+        } else getLogger().info("Music audio via " + musicAudio.describe() + ".");
+        trackLibrary = new dev.servereer.machineconstruct.music.TrackLibrary(this, ingest, musicAudio);
         trackLibrary.load();
         playlistLibrary = new dev.servereer.machineconstruct.music.PlaylistLibrary(this);
         playlistLibrary.load();
         discItem = new dev.servereer.machineconstruct.music.DiscItem(this);
-        dev.servereer.machineconstruct.audio.VoiceChatAudio voiceAudio = null;
-        if (getServer().getPluginManager().getPlugin("voicechat") != null) {
-            voiceAudio = new dev.servereer.machineconstruct.audio.VoiceChatAudio(this);
-            voiceAudio.register();
-        } else {
-            getLogger().info("Simple Voice Chat not present — jukeboxes/music will save tracks but play silently.");
-        }
-        musicPlayer = new dev.servereer.machineconstruct.music.MusicPlayer(this, trackLibrary, voiceAudio);
+        musicPlayer = new dev.servereer.machineconstruct.music.MusicPlayer(this, trackLibrary, musicAudio);
         getServer().getPluginManager().registerEvents(musicPlayer, this);
         dev.servereer.machineconstruct.music.MusicCommand musicCommand =
                 new dev.servereer.machineconstruct.music.MusicCommand(this, ingest, trackLibrary, playlistLibrary, musicPlayer, discItem);

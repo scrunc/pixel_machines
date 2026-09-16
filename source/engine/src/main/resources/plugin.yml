@@ -5,7 +5,10 @@ api-version: '1.21'
 authors: [servereer]
 description: Packet-based factory engine — the system (display rendering, tracking, machine runtime, storage, GUI, API). Ships no machines; content lives in Foundry.
 depend: [packetevents]
-softdepend: [GriefPrevention, WorldGuard, PlaceholderAPI, Vault, EconomyShopGUI, WorldEdit, FastAsyncWorldEdit, voicechat]
+# PixelAudio is the shared Simple Voice Chat core the music system plays through (it loads first as a
+# soft-depend, so its service is published before this plugin asks for it). `voicechat` itself is only
+# listed so load order still puts SVC first for PixelAudio's sake on servers that list neither.
+softdepend: [GriefPrevention, WorldGuard, PlaceholderAPI, Vault, EconomyShopGUI, WorldEdit, FastAsyncWorldEdit, PixelAudio, voicechat]
 commands:
   mc:
     description: MachineConstruct engine commands (give, reload, debug, scanfarm).

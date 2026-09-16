@@ -1,6 +1,6 @@
 package dev.servereer.machineconstruct.music;
 
-import dev.servereer.machineconstruct.audio.AudioTrack;
+import dev.servereer.machineconstruct.audio.MusicAudio;
 import dev.servereer.machineconstruct.audio.TrackIngest;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -16,7 +16,7 @@ import java.util.Map;
 /**
  * The persistent registry of saved music tracks — the store that lets music be "saved for future
  * playing and disc making". Each track is a compact Opus/Ogg file under {@code music/tracks/<id>.ogg}
- * plus a metadata row in {@code music/tracks.yml}. Decoded PCM ({@link AudioTrack}) is LRU-cached so
+ * plus a metadata row in {@code music/tracks.yml}. Decoded PCM ({@link MusicAudio.Clip}) is LRU-cached so
  * repeated plays don't re-decode.
  */
 public final class TrackLibrary {
@@ -44,18 +44,20 @@ public final class TrackLibrary {
 
     private final JavaPlugin plugin;
     private final TrackIngest ingest;
+    private final MusicAudio audio;
     private final File dir;         // music/tracks
     private final File indexFile;   // music/tracks.yml
 
     private final Map<String, Track> tracks = new LinkedHashMap<>();
     // Access-ordered LRU of decoded tracks.
-    private final Map<String, AudioTrack> cache = new LinkedHashMap<>(16, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(Map.Entry<String, AudioTrack> e) { return size() > CACHE_MAX; }
+    private final Map<String, MusicAudio.Clip> cache = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, MusicAudio.Clip> e) { return size() > CACHE_MAX; }
     };
 
-    public TrackLibrary(JavaPlugin plugin, TrackIngest ingest) {
+    public TrackLibrary(JavaPlugin plugin, TrackIngest ingest, MusicAudio audio) {
         this.plugin = plugin;
         this.ingest = ingest;
+        this.audio = audio;
         File music = new File(plugin.getDataFolder(), "music");
         this.dir = new File(music, "tracks");
         this.dir.mkdirs();
@@ -142,10 +144,10 @@ public final class TrackLibrary {
      * Decode a track to PCM (cached). Blocking — decodes Opus→WAV via ffmpeg on a cache miss, so call
      * from an async task. Returns null if the file is missing or decoding fails.
      */
-    public AudioTrack loadTrack(String id) {
+    public MusicAudio.Clip loadTrack(String id) {
         id = sanitize(id);
         synchronized (this) {
-            AudioTrack cached = cache.get(id);
+            MusicAudio.Clip cached = cache.get(id);
             if (cached != null) return cached;
         }
         File ogg = fileFor(id);
@@ -153,7 +155,7 @@ public final class TrackLibrary {
         File wav = null;
         try {
             wav = ingest.decodeToWav(ogg);
-            AudioTrack track = AudioTrack.load(wav);
+            MusicAudio.Clip track = audio.load(wav);
             synchronized (this) { cache.put(id, track); }
             return track;
         } catch (Throwable t) {
@@ -201,7 +203,7 @@ public final class TrackLibrary {
         File wav = null;
         try {
             wav = ingest.decodeToWav(ogg);
-            return AudioTrack.load(wav).durationMs();
+            return audio.load(wav).durationMs();
         } catch (Throwable t) {
             return 0;
         } finally {

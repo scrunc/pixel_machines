@@ -291,6 +291,18 @@ capsule. The chat lines lose their tier too (`✦ Warden's Heart`, not `✦ Myth
 a skin overrides those message keys itself. With `contents: false` or `odds: false` the buttons are gone
 and the views cannot be reached by any other route.
 
+**Audio comes from PixelAudio.** This engine carries no Simple Voice Chat bridge and no decoder of its
+own any more: `audio/MusicAudio` is an interface, `audio/PixelAudioMusic` is the only file that names a
+`dev.servereer.pixelaudio` type, and everything else (jukebox, radio, personal playback) speaks through
+the interface. Install **PixelAudio.jar** beside this plugin — it is a `softdepend`, so it loads first and
+publishes its service before the music system asks. Without it tracks still download and save; they play
+silently and the boot log says so. Two things came free with the move: SVC hands a plugin its server API
+exactly once at startup, so a PlugMan-reload of MachineConstruct no longer costs audio for the rest of the
+boot, and the Opus tuning (`AudioMode.MUSIC`, the jukebox bass fix) now lives in one place for every
+consumer. **`ffmpeg`/`yt-dlp` are still MachineConstruct's** (`audio/TrackIngest`, `plugins/MachineConstruct/bin/`):
+that is the track LIBRARY's downloader and Opus→WAV decoder, not the audio core. With no ffmpeg, playback
+fails with a WARN in the log and silence in game.
+
 **The luck board** — a text part named `pity` (or `pity_*`) on a gacha machine reads every player
 stood in front of it THEIR own guarantees, without anyone opening a menu. It is per-viewer: two
 players at the same cabinet see different numbers. Placeholders, resolved per viewer:
