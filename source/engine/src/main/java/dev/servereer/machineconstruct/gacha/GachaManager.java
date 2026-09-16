@@ -136,7 +136,7 @@ public final class GachaManager {
             odds.append("<").append(r.color()).append(">").append(r.label()).append(" ").append(String.format(java.util.Locale.ROOT, "%.0f", spec.percent(rn))).append("%");
         }
         GachaSeries.Record rec = series(spec).record(p.getUniqueId());
-        String pity = spec.pity().isEmpty() ? "" : " <dark_gray>· <gray>guaranteed: " + pityLine(spec, rec);
+        String pity = spec.pity().isEmpty() || !spec.show().pity() ? "" : " <dark_gray>· <gray>guaranteed: " + pityLine(spec, rec);
         p.sendMessage(msg(t.skin(), "hint", "<gray>Turn the dial — <gold>{price}</gold> a capsule. {odds}{pity}",
                 MenuSkin.vars("price", priceText(spec, 1), "odds", odds.toString(), "pity", pity, "series", spec.title())));
     }
@@ -214,7 +214,9 @@ public final class GachaManager {
             cues.play(m, pullCue, vars, p, () -> open(m, t, nw, p));
         } else {
             cues.play(m, pullCue, vars, p, () -> {
-                if (waiting.get(m) == nw) p.sendMessage(msg(sk, "landed", "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it.", vars));
+                if (waiting.get(m) == nw) p.sendMessage(msg(sk, "landed", spec.show().rarity()
+                        ? "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it."
+                        : "<aqua>A capsule landed — right-click the flap to open it.", vars));
             });
         }
         return true;
@@ -277,7 +279,9 @@ public final class GachaManager {
         if (p != null) {
             if (w.results.size() == 1) {
                 Result r = w.results.get(0);
-                p.sendMessage(msg(sk, "got", "<aqua>✦ <{color}>{rarity_label}</{color}> — <white>{name}</white>", vars(p, spec, r)));
+                p.sendMessage(msg(sk, "got", spec.show().rarity()
+                        ? "<aqua>✦ <{color}>{rarity_label}</{color}> — <white>{name}</white>"
+                        : "<aqua>✦ <white>{name}</white>", vars(p, spec, r)));
             } else host.showResults(p, m, w.results);
         }
         if (best != null && spec.broadcastMin() != null && spec.rank(best.rarity().name()) >= spec.rank(spec.broadcastMin())) broadcast(m, t, w, best);
@@ -334,7 +338,7 @@ public final class GachaManager {
         ClawSpec c = spec.claw();
         String grabs = c == null || c.pityGrabs() <= 0 ? "-" : String.valueOf(Math.max(1, c.pityGrabs() - rec.sinceGrab));
         return template
-                .replace("{pity}", spec.pity().isEmpty() ? "<dark_gray>no guarantees here" : pityLine(spec, rec))
+                .replace("{pity}", !spec.show().pity() ? "" : spec.pity().isEmpty() ? "<dark_gray>no guarantees here" : pityLine(spec, rec))
                 .replace("{grabs}", grabs)
                 .replace("{player}", who)
                 .replace("{pulls}", String.valueOf(rec.pulls))

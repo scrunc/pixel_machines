@@ -269,6 +269,28 @@ every guarantee at or below it and ticks the rest up. The old single form (`pity
 still works, and old files keep their counter (it migrates into the ladder on the next pull). The
 odds screen lists what each guarantee owes that player right now.
 
+**Switching guarantees off**: `pity: false` (or an empty list, or no key at all) and the machine is pure
+chance — nothing is ever owed, and every countdown disappears with it. On a claw, `pity_grabs: 0` does the
+same for the forced hold.
+
+**What a player is told (`show:`)** — a machine can be a plain vending machine or show its whole hand.
+None of this changes a roll; the rarities still drive weights, colours and the theatre, they are simply
+not narrated. **Admins always see everything**, so a machine can be tuned with its shutters down.
+
+```yaml
+show:
+  rarity: true      # rarity names on prizes: the contents list, the results screen, the chat lines
+  odds: true        # the Odds button, and the percentages behind it
+  pity: true        # the guarantee countdowns: the menu line, the chat hint, the luck board
+  contents: true    # the "what's inside" screen
+```
+
+With `rarity: false` the contents screen becomes exactly what it says on the tin — **a plain list of the
+items**, no tiers, no colours, and pieces the player has not pulled show the ITEM rather than a mystery
+capsule. The chat lines lose their tier too (`✦ Warden's Heart`, not `✦ Mythic — Warden's Heart`), unless
+a skin overrides those message keys itself. With `contents: false` or `odds: false` the buttons are gone
+and the views cannot be reached by any other route.
+
 **The luck board** — a text part named `pity` (or `pity_*`) on a gacha machine reads every player
 stood in front of it THEIR own guarantees, without anyone opening a menu. It is per-viewer: two
 players at the same cabinet see different numbers. Placeholders, resolved per viewer:

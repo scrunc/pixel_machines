@@ -55,6 +55,12 @@ public final class GachaMenus implements Listener {
     public void showResults(Player p, Machine m, List<GachaManager.Result> results) { show(p, m, Holder.View.RESULT, 0, results); }
 
     private void show(Player p, Machine m, Holder.View view, int page, List<GachaManager.Result> results) {
+        MachineType mt = typeOf.apply(m);
+        GachaSpec sp = mt == null ? null : mt.gacha();
+        if (sp != null && !p.hasPermission("machineconstruct.admin")) {
+            if (view == Holder.View.ODDS && !sp.show().odds()) view = Holder.View.MAIN;
+            if (view == Holder.View.COLLECTION && !sp.show().contents()) view = Holder.View.MAIN;
+        }
         MachineType t = typeOf.apply(m);
         if (t == null || t.gacha() == null) return;
         Holder h = new Holder(m, view); h.page = page; h.results = results;
@@ -88,17 +94,24 @@ public final class GachaMenus implements Listener {
                 "price", gacha.priceText(spec, 1), "price_multi", gacha.priceText(spec, spec.multi()), "multi", spec.multi());
         switch (h.view) {
             case MAIN -> {
-                inv.setItem(sk.slot(viewKey, "info", 4), sk.item("gacha_info", Material.BOOK, "<aqua>{title}",
-                        List.of("<gray>Your pulls: <white>{pulls}", "<gray>Collected: <white>{owned}<dark_gray>/<white>{total}",
-                                spec.pityEvery() > 0 ? "<gray>Guaranteed <white>{pity_rarity}</white> in <white>{pity}</white> pull(s)" : "<dark_gray>No pity rule"), v));
+                boolean adm = p.hasPermission("machineconstruct.admin");
+                GachaSpec.Show show = spec.show();
+                List<String> info = new ArrayList<>(List.of("<gray>Your pulls: <white>{pulls}"));
+                if (show.contents() || adm) info.add("<gray>Collected: <white>{owned}<dark_gray>/<white>{total}");
+                if (spec.pityEvery() > 0 && (show.pity() || adm)) info.add("<gray>Guaranteed <white>{pity_rarity}</white> in <white>{pity}</white> pull(s)");
+                inv.setItem(sk.slot(viewKey, "info", 4), sk.item("gacha_info", Material.BOOK, "<aqua>{title}", info, v));
                 inv.setItem(sk.slot(viewKey, "pull", 20), sk.decorate("gacha_pull", capsuleIcon(spec, spec.rarityOrder().isEmpty() ? null : spec.rarity(spec.rarityOrder().get(0))),
                         "<green>Pull ×1 <dark_gray>» <gold>{price}", List.of("<gray>Turn the dial once.", "<dark_gray>▶ Click"), v));
                 if (spec.multi() > 1) inv.setItem(sk.slot(viewKey, "pull_multi", 22), sk.decorate("gacha_pull_multi", capsuleIcon(spec, spec.rarity(spec.rarityOrder().get(spec.rarityOrder().size() - 1))),
                         "<green>Pull ×{multi} <dark_gray>» <gold>{price_multi}", List.of("<gray>{multi} capsules, one reveal.", "<dark_gray>▶ Click"), v));
-                inv.setItem(sk.slot(viewKey, "collection", 24), sk.item("gacha_collection", Material.CHEST, "<aqua>Collection <dark_gray>» <white>{owned}<dark_gray>/<white>{total}",
-                        List.of("<gray>Every piece in this series — yours lit up.", "<dark_gray>▶ Click"), v));
-                inv.setItem(sk.slot(viewKey, "odds", 31), sk.item("gacha_odds", Material.COMPARATOR, "<aqua>Odds", List.of("<gray>Rarity shares and the pity rule.", "<dark_gray>▶ Click"), v));
-                if (p.hasPermission("machineconstruct.admin"))
+                if (show.contents() || adm)
+                    inv.setItem(sk.slot(viewKey, "collection", 24), sk.item("gacha_collection", Material.CHEST,
+                            show.rarity() ? "<aqua>Collection <dark_gray>» <white>{owned}<dark_gray>/<white>{total}" : "<aqua>What's inside",
+                            List.of(show.rarity() ? "<gray>Every piece in this series — yours lit up." : "<gray>Everything this machine gives out.", "<dark_gray>▶ Click"), v));
+                if (show.odds() || adm)
+                    inv.setItem(sk.slot(viewKey, "odds", 31), sk.item("gacha_odds", Material.COMPARATOR, "<aqua>Odds",
+                            List.of("<gray>Rarity shares" + (show.pity() && !spec.pity().isEmpty() ? " and the guarantees." : "."), "<dark_gray>▶ Click"), v));
+                if (adm)
                     inv.setItem(sk.slot(viewKey, "admin", 49), sk.item("gacha_admin", Material.COMMAND_BLOCK, "<red>Admin <dark_gray>» <white>load the machine", List.of("<gray>Feed held items as pieces, set rarities.", "<dark_gray>▶ Click"), v));
             }
             case COLLECTION, ADMIN -> {
@@ -115,7 +128,8 @@ public final class GachaMenus implements Listener {
                     int n = rec.counts.getOrDefault(e.id, 0);
                     ItemStack icon;
                     List<String> lore = new ArrayList<>();
-                    lore.add("<" + r.color() + ">" + r.label() + (e.once ? " <dark_gray>· collectible" : ""));
+                    boolean tier = admin || spec.show().rarity();
+                    if (tier) lore.add("<" + r.color() + ">" + r.label() + (e.once ? " <dark_gray>· collectible" : ""));
                     if (admin) {
                         icon = e.shown();
                         if (e.isCommand()) lore.add("<gray>Runs: <white>" + String.join(" <dark_gray>· <white>", e.commands));
@@ -124,6 +138,7 @@ public final class GachaMenus implements Listener {
                         lore.add("<yellow>◀ Left: next rarity   <gold>▶ Right: collectible on/off");
                         lore.add("<red>⇧ Shift-left: remove this piece");
                     } else if (has) { icon = e.shown(); lore.add("<gray>Pulled <white>" + n + "×"); }
+                    else if (!tier) { icon = e.shown(); lore.add("<dark_gray>Not pulled yet"); }   // a plain list shows the ITEM, not its capsule
                     else { icon = Heads.create(e.capsule == null || e.capsule.isBlank() ? r.capsule() : e.capsule); lore.add("<dark_gray>Not pulled yet"); }
                     inv.setItem(9 + i, sk.decorate("gacha_piece", icon, (has || admin ? "<white>" : "<gray>") + e.name, lore, v));
                 }
@@ -162,7 +177,8 @@ public final class GachaMenus implements Listener {
                     slot += 2; if (slot % 9 == 8) slot += 3;
                 }
                 List<String> pl = new ArrayList<>();
-                if (spec.pity().isEmpty()) pl.add("<dark_gray>No guarantees on this machine.");
+                if (!spec.show().pity() && !p.hasPermission("machineconstruct.admin")) pl = null;
+                else if (spec.pity().isEmpty()) pl.add("<dark_gray>No guarantees on this machine.");
                 else {
                     pl.add("<gray>However the dice fall, these are owed:");
                     for (GachaSpec.Pity rule : spec.pity()) {
@@ -172,7 +188,7 @@ public final class GachaMenus implements Listener {
                                 + " <dark_gray>(yours in " + Math.max(1, rule.every() - GachaManager.counter(rec, spec, rule)) + ")");
                     }
                 }
-                inv.setItem(sk.slot(viewKey, "pity", 31), sk.item("gacha_pity", Material.CLOCK, "<aqua>Guarantees", pl, v));
+                if (pl != null) inv.setItem(sk.slot(viewKey, "pity", 31), sk.item("gacha_pity", Material.CLOCK, "<aqua>Guarantees", pl, v));
                 inv.setItem(sk.slot(viewKey, "back", 45), sk.item("back", Material.BARRIER, "<red>◀ Back", List.of(), v));
             }
             case RESULT -> {
@@ -180,8 +196,11 @@ public final class GachaMenus implements Listener {
                 for (GachaManager.Result r : h.results == null ? List.<GachaManager.Result>of() : h.results) {
                     if (9 + i >= 45) break;
                     ItemStack icon = r.entry().shown();
-                    inv.setItem(9 + i++, sk.decorate("gacha_result", icon, "<" + r.rarity().color() + ">" + r.entry().name,
-                            List.of("<gray>" + r.rarity().label() + (r.duplicate() ? " <dark_gray>· duplicate" : "")), v));
+                    boolean tag = spec.show().rarity() || p.hasPermission("machineconstruct.admin");
+                    String dupe = r.duplicate() ? "<dark_gray>· duplicate" : "";
+                    inv.setItem(9 + i++, sk.decorate("gacha_result", icon, (tag ? "<" + r.rarity().color() + ">" : "<white>") + r.entry().name,
+                            tag ? List.of("<gray>" + r.rarity().label() + (r.duplicate() ? " " + dupe : ""))
+                                : (r.duplicate() ? List.of("<gray>" + dupe) : List.<String>of()), v));
                 }
                 inv.setItem(sk.slot(viewKey, "back", 49), sk.item("gacha_again", Material.NETHER_STAR, "<green>Pull again", List.of(), v));
             }

@@ -47,6 +47,27 @@ public final class GachaSpec {
      */
     public record Pity(String rarity, int every) { }
 
+    /**
+     * What a PLAYER is allowed to see. A machine may be a plain vending machine — items in, item out,
+     * no percentages, no tiers, no countdown — or it may show its whole hand. None of this changes a
+     * roll: the rarities still drive weights, colours and the theatre, they are simply not narrated.
+     * Admins always see everything, so a machine can be tuned without turning its shutters back on.
+     * <pre>
+     * show:
+     *   rarity: false      # no rarity names in the menus or the messages — just the item
+     *   odds: false        # no Odds screen, no percentages
+     *   pity: true         # the guarantee countdowns (menu line, chat hint, luck board)
+     *   contents: true     # the Collection screen: what this machine can give
+     * </pre>
+     */
+    public record Show(boolean rarity, boolean odds, boolean pity, boolean contents) {
+        public static Show parse(ConfigurationSection sec) {
+            if (sec == null) return new Show(true, true, true, true);
+            return new Show(sec.getBoolean("rarity", true), sec.getBoolean("odds", true),
+                    sec.getBoolean("pity", true), sec.getBoolean("contents", true));
+        }
+    }
+
     /** How a machine performs a pull: a capsule that parks in a tray, or reels that spin and pay out at once. */
     public enum Style { CAPSULE, REELS, CLAW }
 
@@ -56,6 +77,7 @@ public final class GachaSpec {
     private final int priceCoins; private final String coinTier;
     private final Material priceItem; private final int priceAmount;
     private final List<Pity> pity;
+    private final Show show;
     private final int multi;
     private final int openAfter;
     private final String broadcastMin; private final double broadcastRadius;
@@ -64,11 +86,11 @@ public final class GachaSpec {
     private final String seedCrate;   // gacha.seed_crate — an ExcellentCrates crate id whose rewards fill the series once
     private final Map<String, Rarity> rarities;
 
-    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity,
+    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity, Show show,
                       int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate, ClawSpec claw) {
         this.seedCrate = seedCrate; this.claw = claw;
         this.series = series; this.title = title; this.style = style; this.priceMoney = priceMoney; this.priceCoins = priceCoins; this.coinTier = coinTier; this.priceItem = priceItem; this.priceAmount = priceAmount;
-        this.pity = pity; this.multi = multi; this.openAfter = openAfter;
+        this.pity = pity; this.show = show; this.multi = multi; this.openAfter = openAfter;
         this.broadcastMin = broadcastMin; this.broadcastRadius = broadcastRadius;
         this.hidden = Collections.unmodifiableList(hidden); this.rarities = Collections.unmodifiableMap(rarities);
     }
@@ -87,7 +109,8 @@ public final class GachaSpec {
             item = Material.matchMaterial(price.getString("item", "").trim().toUpperCase().replace("MINECRAFT:", ""));
             amount = Math.max(1, price.getInt("amount", 1));
         }
-        // pity: one rule (a map) or a ladder (a list of them)
+        // pity: one rule (a map), a ladder (a list of them), or `false` — the guarantees switched off
+        // entirely. Both shapes below read empty out of a boolean, so `pity: false` needs no special case.
         List<Pity> pity = new ArrayList<>();
         ConfigurationSection pitySec = sec.getConfigurationSection("pity");
         if (pitySec != null && pitySec.isString("rarity")) pity.add(new Pity(pitySec.getString("rarity"), pitySec.getInt("every", 0)));
@@ -109,7 +132,7 @@ public final class GachaSpec {
         String styleName = sec.getString("style", "capsule");
         Style style = "reels".equalsIgnoreCase(styleName) ? Style.REELS
                 : "claw".equalsIgnoreCase(styleName) ? Style.CLAW : Style.CAPSULE;
-        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
+        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Show.parse(sec.getConfigurationSection("show")), Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
                 bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"), ClawSpec.parse(sec.getConfigurationSection("claw")));
     }
 
@@ -126,6 +149,8 @@ public final class GachaSpec {
     public String coinTier() { return coinTier; }
     public Material priceItem() { return priceItem; }
     public int priceAmount() { return priceAmount; }
+    /** What this machine tells a player about itself. */
+    public Show show() { return show; }
     /** Every guarantee this machine carries, in file order. */
     public List<Pity> pity() { return pity; }
     /** The gentlest guarantee — what a one-line hint or an odds screen leads with. */

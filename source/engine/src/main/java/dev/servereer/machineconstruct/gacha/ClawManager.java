@@ -397,8 +397,10 @@ public final class ClawManager implements Listener {
         if (p != null) {
             GachaSeries.Record rec = gacha.series(ss.spec).record(ss.player);
             int left = Math.max(0, ss.claw.pityGrabs() - rec.sinceGrab);
-            p.sendMessage(GachaManager.msg(ss.t.skin(), "claw_miss",
-                    "<gray>It slipped. <dark_gray>({left} more and the claw is guaranteed to hold.)",
+            boolean tell = ss.spec.show().pity() && ss.claw.pityGrabs() > 0;
+            p.sendMessage(GachaManager.msg(ss.t.skin(), "claw_miss", tell
+                            ? "<gray>It slipped. <dark_gray>({left} more and the claw is guaranteed to hold.)"
+                            : "<gray>It slipped.",
                     MenuSkin.vars("left", String.valueOf(left))));
         }
         sound(ss, "block.stone_button.click_off", 0.8f, 0.7f);
