@@ -98,7 +98,9 @@ public final class MachineConstruct extends JavaPlugin implements MachineConstru
             getLogger().info(why);
             musicAudio = new dev.servereer.machineconstruct.audio.MusicAudio.MusicPlayerless(why);
         } else getLogger().info("Music audio via " + musicAudio.describe() + ".");
+        ingest.useShared(musicAudio);
         trackLibrary = new dev.servereer.machineconstruct.music.TrackLibrary(this, ingest, musicAudio);
+        getLogger().info("Media tools (ffmpeg/yt-dlp): " + ingest.toolsSource() + ".");
         trackLibrary.load();
         playlistLibrary = new dev.servereer.machineconstruct.music.PlaylistLibrary(this);
         playlistLibrary.load();

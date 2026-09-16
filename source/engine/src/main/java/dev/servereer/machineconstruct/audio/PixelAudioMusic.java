@@ -3,6 +3,7 @@ package dev.servereer.machineconstruct.audio;
 import dev.servereer.pixelaudio.AudioHandle;
 import dev.servereer.pixelaudio.AudioMode;
 import dev.servereer.pixelaudio.AudioTrack;
+import dev.servereer.pixelaudio.MediaTools;
 import dev.servereer.pixelaudio.PixelAudio;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -21,13 +22,18 @@ import java.util.function.Supplier;
 public final class PixelAudioMusic implements MusicAudio {
 
     private final PixelAudio core;
+    private final MediaTools media;   // the shared ffmpeg/yt-dlp; null on an older PixelAudio
 
-    private PixelAudioMusic(PixelAudio core) { this.core = core; }
+    private PixelAudioMusic(PixelAudio core, MediaTools media) { this.core = core; this.media = media; }
 
     /** Grab the service, or null if PixelAudio is enabled but has not published it yet. */
     public static MusicAudio load(JavaPlugin plugin) {
         PixelAudio core = plugin.getServer().getServicesManager().load(PixelAudio.class);
-        return core == null ? null : new PixelAudioMusic(core);
+        if (core == null) return null;
+        MediaTools media = null;
+        try { media = plugin.getServer().getServicesManager().load(MediaTools.class); }
+        catch (Throwable ignored) { }   // a PixelAudio older than the media service
+        return new PixelAudioMusic(core, media);
     }
 
     @Override public boolean available() { return core.available(); }
@@ -55,6 +61,15 @@ public final class PixelAudioMusic implements MusicAudio {
     @Override
     public Handle startStatic(Player listener, Supplier<short[]> supplier, Runnable onStopped) {
         return wrap(core.startStatic(listener, AudioMode.MUSIC, supplier, onStopped));
+    }
+
+    @Override public File ffmpeg() { return media == null || !media.hasFfmpeg() ? null : media.ffmpeg(); }
+    @Override public File ytdlp() { return media == null || !media.hasYtdlp() ? null : media.ytdlp(); }
+
+    @Override
+    public File decodeToWav(File src, File cache) throws Exception {
+        if (media == null || !media.hasFfmpeg()) throw new java.io.IOException("no shared ffmpeg in PixelAudio");
+        return media.decodeToWav(src, cache);
     }
 
     private static Handle wrap(AudioHandle h) {

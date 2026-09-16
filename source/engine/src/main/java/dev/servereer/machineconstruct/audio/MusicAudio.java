@@ -38,6 +38,19 @@ public interface MusicAudio {
      */
     Clip load(File file) throws Exception;
 
+    /**
+      * The SHARED ffmpeg, or null when this core has none. One ~220 MB binary in
+      * {@code plugins/PixelAudio/bin/} serves every plugin that ingests audio, instead of a copy per plugin;
+      * {@link TrackIngest} falls back to its own {@code bin/} when this returns null.
+      */
+    File ffmpeg();
+
+    /** The SHARED yt-dlp, or null when this core has none. */
+    File ytdlp();
+
+    /** Decode through the shared ffmpeg. Throws when this core has none — callers fall back to their own. */
+    File decodeToWav(File src, File cache) throws Exception;
+
     /** A stream at a point in the world, audible within {@code distance} blocks. Null if it cannot start. */
     Handle startLocational(World world, double x, double y, double z, float distance,
                            Supplier<short[]> supplier, Runnable onStopped);
@@ -73,6 +86,9 @@ public interface MusicAudio {
         @Override public boolean available() { return false; }
         @Override public String describe() { return why; }
         @Override public Clip load(File file) throws Exception { throw new IllegalStateException(why); }
+        @Override public File ffmpeg() { return null; }
+        @Override public File ytdlp() { return null; }
+        @Override public File decodeToWav(File src, File cache) throws Exception { throw new IllegalStateException(why); }
         @Override public Handle startLocational(World w, double x, double y, double z, float d,
                                                 Supplier<short[]> s, Runnable r) { return null; }
         @Override public Handle startStatic(Player l, Supplier<short[]> s, Runnable r) { return null; }

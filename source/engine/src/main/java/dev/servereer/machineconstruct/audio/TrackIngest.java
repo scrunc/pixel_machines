@@ -48,9 +48,26 @@ public final class TrackIngest {
     }
 
     private final JavaPlugin plugin;
+    /** The shared PixelAudio tools, when there are any — set once the audio core is resolved. */
+    private MusicAudio shared;
 
     public TrackIngest(JavaPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * Point this at the shared binaries. ffmpeg is ~220 MB, so PixelAudio keeps ONE copy for every plugin
+     * that ingests audio; a copy still sitting in {@code plugins/MachineConstruct/bin/} wins, so a server
+     * that has not moved its binaries yet keeps working exactly as before.
+     */
+    public void useShared(MusicAudio audio) { this.shared = audio; }
+
+    /** Where ffmpeg actually came from, for status lines. */
+    public String toolsSource() {
+        File own = new File(binDir(), "ffmpeg");
+        if (own.isFile() || new File(binDir(), "ffmpeg.exe").isFile()) return binDir().getPath();
+        File sh = shared == null ? null : shared.ffmpeg();
+        return sh != null ? sh.getParentFile().getPath() + " (shared, PixelAudio)" : "MISSING";
     }
 
     private File binDir() {
@@ -69,8 +86,20 @@ public final class TrackIngest {
         return f;
     }
 
-    private File ffmpegBin() { return resolve("music.ffmpeg-path", "ffmpeg"); }
-    private File ytdlpBin()  { return resolve("music.ytdlp-path", "yt-dlp"); }
+    // Our own bin/ first (an explicitly placed binary always wins), then PixelAudio's shared pair.
+    private File ffmpegBin() {
+        File own = resolve("music.ffmpeg-path", "ffmpeg");
+        if (own.isFile()) return own;
+        File sh = shared == null ? null : shared.ffmpeg();
+        return sh != null ? sh : own;
+    }
+
+    private File ytdlpBin() {
+        File own = resolve("music.ytdlp-path", "yt-dlp");
+        if (own.isFile()) return own;
+        File sh = shared == null ? null : shared.ytdlp();
+        return sh != null ? sh : own;
+    }
 
     /**
      * The YouTube cookies file to use, or null. Honours {@code music.cookies-file} when set; otherwise

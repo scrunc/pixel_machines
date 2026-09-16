@@ -299,9 +299,14 @@ publishes its service before the music system asks. Without it tracks still down
 silently and the boot log says so. Two things came free with the move: SVC hands a plugin its server API
 exactly once at startup, so a PlugMan-reload of MachineConstruct no longer costs audio for the rest of the
 boot, and the Opus tuning (`AudioMode.MUSIC`, the jukebox bass fix) now lives in one place for every
-consumer. **`ffmpeg`/`yt-dlp` are still MachineConstruct's** (`audio/TrackIngest`, `plugins/MachineConstruct/bin/`):
-that is the track LIBRARY's downloader and Opus→WAV decoder, not the audio core. With no ffmpeg, playback
-fails with a WARN in the log and silence in game.
+consumer. **`ffmpeg`/`yt-dlp` are shared too.** ffmpeg is a ~220 MB static binary, so PixelAudio publishes a second
+service, `MediaTools`, and keeps ONE copy in `plugins/PixelAudio/bin/` for every plugin that ingests audio.
+`audio/TrackIngest` still owns the music library's own downloading (titles, playlists, the YouTube
+bot-wall cookies) but takes its binaries from there. Resolution order is **this plugin's own
+`plugins/MachineConstruct/bin/` first, then PixelAudio's shared pair** — an explicitly placed binary always
+wins, so a server that has not moved its copy keeps working untouched. The boot log says which it found
+(`Media tools (ffmpeg/yt-dlp): …`). With neither, tracks still download and save but playback fails with a
+WARN in the log and silence in game.
 
 **The luck board** — a text part named `pity` (or `pity_*`) on a gacha machine reads every player
 stood in front of it THEIR own guarantees, without anyone opening a menu. It is per-viewer: two
