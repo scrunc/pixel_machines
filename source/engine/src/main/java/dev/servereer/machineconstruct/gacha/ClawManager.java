@@ -332,6 +332,7 @@ public final class ClawManager implements Listener {
         ss.nearest = null;
         for (PacketDisplay d : CuePlayer.select(ss.m, "pile_*")) {
             if (empty.contains(d)) continue;             // that slot is still waiting to be restocked
+            if (!(d.baseContent() instanceof ItemContent)) continue;   // only a PRIZE can be lifted, never scenery
             float[] p = modelOf(ss, d.transform());
             double dx = p[0] - (0.5 + ss.x), dz = p[2] - (0.5 + ss.z);
             double r = Math.sqrt(dx * dx + dz * dz);
@@ -520,7 +521,8 @@ public final class ClawManager implements Listener {
      */
     private void carry(Session ss, boolean on) {
         DisplayContent lifted = null;
-        if (on && ss.nearest != null && ss.taken == null && !empty.contains(ss.nearest)) {
+        if (on && ss.nearest != null && ss.taken == null && !empty.contains(ss.nearest)
+                && ss.nearest.baseContent() instanceof ItemContent) {
             lifted = ss.nearest.baseContent();
             ss.taken = ss.nearest;
             empty.add(ss.nearest);
@@ -584,6 +586,7 @@ public final class ClawManager implements Listener {
     private void jostlePile(Session ss) {
         List<PacketDisplay> pile = CuePlayer.select(ss.m, "pile_*");
         for (PacketDisplay d : pile) {
+            if (!(d.baseContent() instanceof ItemContent)) continue;   // the floor is not a prize
             float[] p = modelOf(ss, d.transform());
             double dx = p[0] - (0.5 + ss.x), dz = p[2] - (0.5 + ss.z);
             if (dx * dx + dz * dz > 0.09) continue;

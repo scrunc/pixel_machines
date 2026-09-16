@@ -144,7 +144,28 @@ public final class PacketDisplay {
     public void pin() { this.pinned = true; this.locked = true; }
     public boolean pinned() { return pinned; }
     public void forceTransform(MTransform t) { if (this.transform == null || !this.transform.same(t)) dirty = true; this.transform = t; }
-    public void forceContent(DisplayContent c) { DisplayContent next = c == null ? baseContent : c; if (next != this.content) dirty = true; this.content = next; }
+    /**
+      * Swap what this display shows. The new content must be the SAME KIND as the entity was spawned as —
+      * a block display stays a block display. Sending an ItemDisplay a block-state field (or the reverse)
+      * throws inside the client's metadata decoder and DISCONNECTS the player with "Network Protocol
+      * Error"; it is not a rendering glitch, it kicks them. The kind is fixed at spawn, so a mismatch can
+      * only be a bug upstream: refuse it, keep the old content, and say so once.
+      */
+    public void forceContent(DisplayContent c) {
+        DisplayContent next = c == null ? baseContent : c;
+        if (next != null && content != null && next.entityType() != content.entityType()) {
+            if (!warnedKind) {
+                warnedKind = true;
+                java.util.logging.Logger.getLogger("Minecraft").warning("[MachineConstruct] refused to show "
+                        + next.entityType().getName() + " content on part '" + partName + "', which is a "
+                        + content.entityType().getName() + " — a display cannot change kind after it is spawned.");
+            }
+            return;
+        }
+        if (next != this.content) dirty = true;
+        this.content = next;
+    }
+    private boolean warnedKind;
     public DisplayContent content() { return content; }
 
     /** Outline glow in a given colour for one viewer (null = off); machine-wide effects send it to every viewer. */

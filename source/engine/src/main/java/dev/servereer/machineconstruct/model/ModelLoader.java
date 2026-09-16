@@ -306,7 +306,7 @@ public final class ModelLoader {
             return new ItemContent(Heads.create(block.trim()), ItemContent.context("fixed"));
         }
         if (block != null) {
-            Material mat = Material.matchMaterial(block);
+            Material mat = matchBlock(block);
             if (mat == null || !mat.isBlock()) {
                 log.warning("[MachineConstruct] model " + path + ": unknown block '" + block + "', using STONE.");
                 mat = Material.STONE;
@@ -343,6 +343,27 @@ public final class ModelLoader {
     }
 
     /** A base64 textures blob or a texture URL — what {@code head:} takes; accepted for {@code block:} too. */
+    /**
+     * Match a block name, allowing for Minecraft's renames. 26.x split chains into iron/copper, so every
+     * model that said {@code chain} silently became STONE — a model should not rot because a block was
+     * renamed under it, and the warning for a genuinely unknown block should still mean something.
+     */
+    private static Material matchBlock(String name) {
+        Material m = Material.matchMaterial(name);
+        if (m != null && m.isBlock()) return m;
+        String key = name.trim().toLowerCase().replace("minecraft:", "");
+        String[] alts = switch (key) {
+            case "chain" -> new String[]{ "iron_chain" };
+            case "iron_chain" -> new String[]{ "chain" };
+            default -> null;
+        };
+        if (alts != null) for (String alt : alts) {
+            Material a = Material.matchMaterial(alt);
+            if (a != null && a.isBlock()) return a;
+        }
+        return m;
+    }
+
     static boolean isHeadTexture(String v) {
         String s = v.trim();
         return s.startsWith("eyJ") || s.startsWith("http://") || s.startsWith("https://");
