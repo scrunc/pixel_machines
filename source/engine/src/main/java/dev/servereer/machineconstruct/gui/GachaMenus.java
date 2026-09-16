@@ -146,9 +146,11 @@ public final class GachaMenus implements Listener {
                         lore.add("<yellow>◀ Left: next rarity   <gold>▶ Right: collectible on/off");
                         lore.add("<red>⇧ Shift-left: remove this piece");
                     } else {
-                        // a plain list (rarity hidden) shows the ITEM itself; otherwise an unpulled piece
-                        // is still a mystery capsule
-                        icon = has || !tier ? e.shown() : Heads.create(e.capsule == null || e.capsule.isBlank() ? r.capsule() : e.capsule);
+                        // The contents list shows the REAL ITEM — a menu of identical capsule heads tells a
+                        // player nothing about what is in the machine. `show.mystery: true` brings back the
+                        // old behaviour, where a piece stays a capsule until you have pulled it.
+                        icon = has || !spec.show().mystery() ? e.shown()
+                                : Heads.create(e.capsule == null || e.capsule.isBlank() ? r.capsule() : e.capsule);
                         GachaSpec.Lore lt = spec.lore();
                         List<String> body = new ArrayList<>(has ? lt.owned() : lt.unowned());
                         body.addAll(lt.extra());

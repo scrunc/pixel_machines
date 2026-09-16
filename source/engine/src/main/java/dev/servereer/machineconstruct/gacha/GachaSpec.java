@@ -58,13 +58,15 @@ public final class GachaSpec {
      *   odds: false        # no Odds screen, no percentages
      *   pity: true         # the guarantee countdowns (menu line, chat hint, luck board)
      *   contents: true     # the Collection screen: what this machine can give
+     *   mystery: false     # true = a prize not yet pulled shows as its capsule, not as itself
      * </pre>
      */
-    public record Show(boolean rarity, boolean odds, boolean pity, boolean contents) {
+    public record Show(boolean rarity, boolean odds, boolean pity, boolean contents, boolean mystery) {
         public static Show parse(ConfigurationSection sec) {
-            if (sec == null) return new Show(true, true, true, true);
+            if (sec == null) return new Show(true, true, true, true, false);
             return new Show(sec.getBoolean("rarity", true), sec.getBoolean("odds", true),
-                    sec.getBoolean("pity", true), sec.getBoolean("contents", true));
+                    sec.getBoolean("pity", true), sec.getBoolean("contents", true),
+                    sec.getBoolean("mystery", false));
         }
     }
 

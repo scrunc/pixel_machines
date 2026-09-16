@@ -270,7 +270,9 @@ still works, and old files keep their counter (it migrates into the ladder on th
 odds screen lists what each guarantee owes that player right now.
 
 **The player's menu.** Clicking the machine opens what is INSIDE it — a chest of every prize it gives
-out, yours lit up — while the machine's own dial or lever stays the only way to actually pull. (Admins
+out **as the real items**, yours lit up — a grid of identical capsule heads tells a player nothing about
+what a machine holds, so the icon is the prize itself (`show.mystery: true` brings back capsules-until-pulled).
+The machine's own dial or lever stays the only way to actually pull. (Admins
 get the loading view instead; `show.contents: false` takes the menu away and leaves the chat hint.) From
 there an `Odds` button appears if `show.odds` allows it, and `◀ Back` steps to the contents; from the
 contents itself the button closes, because the player came in from the world.
@@ -330,6 +332,7 @@ show:
   odds: true        # the Odds button, and the percentages behind it
   pity: true        # the guarantee countdowns: the menu line, the chat hint, the luck board
   contents: true    # the "what's inside" screen
+  mystery: false    # true = a prize not yet pulled shows as its capsule instead of as itself
 ```
 
 With `rarity: false` the contents screen becomes exactly what it says on the tin — **a plain list of the
