@@ -269,6 +269,29 @@ every guarantee at or below it and ticks the rest up. The old single form (`pity
 still works, and old files keep their counter (it migrates into the ladder on the next pull). The
 odds screen lists what each guarantee owes that player right now.
 
+**The player's menu.** Clicking the machine opens what is INSIDE it — a chest of every prize it gives
+out, yours lit up — while the machine's own dial or lever stays the only way to actually pull. (Admins
+get the loading view instead; `show.contents: false` takes the menu away and leaves the chat hint.) From
+there an `Odds` button appears if `show.odds` allows it, and `◀ Back` steps to the contents; from the
+contents itself the button closes, because the player came in from the world.
+
+**`lore:`** is what each prize says in that menu. Lines are MiniMessage, the file's own `${palette}` vars
+work, and **a line that ends up empty is dropped** — which is how `show:` prunes it without anyone writing
+three versions:
+
+```yaml
+lore:
+  owned:   ["<{color}>{rarity_label}", "<gray>Pulled <white>{count}×"]
+  unowned: ["<{color}>{rarity_label}", "<dark_gray>Not pulled yet"]
+  extra:   ["<dark_gray>{chance}", "<dark_gray>{pity}"]      # appended to both
+```
+
+`{name}` · `{rarity}` · `{rarity_label}` · `{color}` · `{count}` (times pulled) · `{chance}` (the whole
+"Chance: 4.2%", or `{chance_value}` for the bare number) · `{pity}` (that player's guarantees) · `{owned}`
+· `{total}` · `{pulls}` · `{price}`. With `show.rarity: false` the rarity placeholders resolve to nothing,
+so those lines vanish and the menu is a plain list of items; same for `{chance}` under `show.odds` and
+`{pity}` under `show.pity`.
+
 **What a machine sounds like (`sfx:`)** — every noise the engine makes is a named EVENT, and a machine's
 `sfx:` block rebinds any of them. Leave one out and it keeps the engine's default, so a machine with no
 `sfx:` block sounds exactly as it always did.

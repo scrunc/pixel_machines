@@ -68,6 +68,37 @@ public final class GachaSpec {
         }
     }
 
+    /**
+     * The lore on a prize in the player's contents menu. Lines are MiniMessage with placeholders, and
+     * <b>a line that comes out empty is dropped</b> — which is how {@code show:} does its work here: with
+     * {@code rarity: false} the rarity placeholders resolve to nothing, so the rarity line simply is not
+     * there, and the same for {@code odds}/{@code pity}. Write the lore you want; the switches prune it.
+     * <pre>
+     * lore:
+     *   owned:   ["&lt;{color}&gt;{rarity_label}", "&lt;gray&gt;Pulled &lt;white&gt;{count}x"]
+     *   unowned: ["&lt;{color}&gt;{rarity_label}", "&lt;dark_gray&gt;Not pulled yet"]
+     *   extra:   ["&lt;gray&gt;Chance: &lt;white&gt;{chance}%", "&lt;dark_gray&gt;{pity}"]   # appended to both
+     * </pre>
+     * Placeholders: {@code {name} {rarity} {rarity_label} {color} {count} {chance} {pity} {owned} {total}
+     * {pulls} {price}}.
+     */
+    public record Lore(List<String> owned, List<String> unowned, List<String> extra) {
+        static final List<String> DEF_OWNED = List.of("<{color}>{rarity_label}", "<gray>Pulled <white>{count}×");
+        static final List<String> DEF_UNOWNED = List.of("<{color}>{rarity_label}", "<dark_gray>Not pulled yet");
+        static final List<String> DEF_EXTRA = List.of("<dark_gray>{chance}", "<dark_gray>{pity}");
+
+        static Lore parse(ConfigurationSection sec) {
+            if (sec == null) return new Lore(DEF_OWNED, DEF_UNOWNED, DEF_EXTRA);
+            return new Lore(lines(sec, "owned", DEF_OWNED), lines(sec, "unowned", DEF_UNOWNED), lines(sec, "extra", DEF_EXTRA));
+        }
+
+        private static List<String> lines(ConfigurationSection sec, String key, List<String> dflt) {
+            if (!sec.contains(key)) return dflt;
+            if (sec.isString(key)) return List.of(sec.getString(key, ""));
+            return sec.getStringList(key);
+        }
+    }
+
     /** How a machine performs a pull: a capsule that parks in a tray, or reels that spin and pay out at once. */
     public enum Style { CAPSULE, REELS, CLAW }
 
@@ -79,6 +110,7 @@ public final class GachaSpec {
     private final List<Pity> pity;
     private final Show show;
     private final Sfx sfx;
+    private final Lore lore;
     private final int multi;
     private final int openAfter;
     private final String broadcastMin; private final double broadcastRadius;
@@ -87,11 +119,11 @@ public final class GachaSpec {
     private final String seedCrate;   // gacha.seed_crate — an ExcellentCrates crate id whose rewards fill the series once
     private final Map<String, Rarity> rarities;
 
-    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity, Show show, Sfx sfx,
+    private GachaSpec(String series, String title, Style style, double priceMoney, int priceCoins, String coinTier, Material priceItem, int priceAmount, List<Pity> pity, Show show, Sfx sfx, Lore lore,
                       int multi, int openAfter, String broadcastMin, double broadcastRadius, List<String> hidden, Map<String, Rarity> rarities, String seedCrate, ClawSpec claw) {
         this.seedCrate = seedCrate; this.claw = claw;
         this.series = series; this.title = title; this.style = style; this.priceMoney = priceMoney; this.priceCoins = priceCoins; this.coinTier = coinTier; this.priceItem = priceItem; this.priceAmount = priceAmount;
-        this.pity = pity; this.show = show; this.sfx = sfx; this.multi = multi; this.openAfter = openAfter;
+        this.pity = pity; this.show = show; this.sfx = sfx; this.lore = lore; this.multi = multi; this.openAfter = openAfter;
         this.broadcastMin = broadcastMin; this.broadcastRadius = broadcastRadius;
         this.hidden = Collections.unmodifiableList(hidden); this.rarities = Collections.unmodifiableMap(rarities);
     }
@@ -133,7 +165,7 @@ public final class GachaSpec {
         String styleName = sec.getString("style", "capsule");
         Style style = "reels".equalsIgnoreCase(styleName) ? Style.REELS
                 : "claw".equalsIgnoreCase(styleName) ? Style.CLAW : Style.CAPSULE;
-        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Show.parse(sec.getConfigurationSection("show")), Sfx.parse(sec.getConfigurationSection("sfx")), Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
+        return new GachaSpec(series, title, style, money, coins, coinTier, item, amount, pity, Show.parse(sec.getConfigurationSection("show")), Sfx.parse(sec.getConfigurationSection("sfx")), Lore.parse(sec.getConfigurationSection("lore")), Math.max(0, sec.getInt("multi", 10)), Math.max(3, sec.getInt("open_after", 20)),
                 bc == null ? null : bc.getString("min_rarity"), bc == null ? 0 : bc.getDouble("radius", 24), sec.getStringList("hidden"), rarities, sec.getString("seed_crate"), ClawSpec.parse(sec.getConfigurationSection("claw")));
     }
 
@@ -150,6 +182,9 @@ public final class GachaSpec {
     public String coinTier() { return coinTier; }
     public Material priceItem() { return priceItem; }
     public int priceAmount() { return priceAmount; }
+    /** What a prize's lore says in the player's menu. */
+    public Lore lore() { return lore; }
+
     /** What this machine SOUNDS like — every event it rebinds. See {@link Sfx}. */
     public Sfx sfx() { return sfx; }
 

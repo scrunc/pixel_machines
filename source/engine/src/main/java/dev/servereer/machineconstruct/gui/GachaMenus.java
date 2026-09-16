@@ -22,6 +22,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -51,7 +52,14 @@ public final class GachaMenus implements Listener {
     }
 
     /** Admins land on the loading view (players never get a GUI — the dial is the interface). */
-    public void open(Player p, Machine m) { show(p, m, p.hasPermission("machineconstruct.admin") ? Holder.View.ADMIN : Holder.View.MAIN, 0, null); }
+    /**
+     * Open the machine for someone. An admin gets the loading view; a player gets the CONTENTS — the chest
+     * of everything this machine gives out — because the machine's own dial is how you pull, and a menu
+     * that could pull as well would make the cabinet decoration.
+     */
+    public void open(Player p, Machine m) {
+        show(p, m, p.hasPermission("machineconstruct.admin") ? Holder.View.ADMIN : Holder.View.COLLECTION, 0, null);
+    }
     public void showResults(Player p, Machine m, List<GachaManager.Result> results) { show(p, m, Holder.View.RESULT, 0, results); }
 
     private void show(Player p, Machine m, Holder.View view, int page, List<GachaManager.Result> results) {
@@ -129,22 +137,38 @@ public final class GachaMenus implements Listener {
                     ItemStack icon;
                     List<String> lore = new ArrayList<>();
                     boolean tier = admin || spec.show().rarity();
-                    if (tier) lore.add("<" + r.color() + ">" + r.label() + (e.once ? " <dark_gray>· collectible" : ""));
                     if (admin) {
+                        lore.add("<" + r.color() + ">" + r.label() + (e.once ? " <dark_gray>· collectible" : ""));
                         icon = e.shown();
                         if (e.isCommand()) lore.add("<gray>Runs: <white>" + String.join(" <dark_gray>· <white>", e.commands));
                         lore.add("<gray>Weight in rarity: <white>" + GachaManager.fmt(e.weight));
                         lore.add("<gray>Capsule: <white>" + (e.capsule == null || e.capsule.isBlank() ? "rarity's" : "custom"));
                         lore.add("<yellow>◀ Left: next rarity   <gold>▶ Right: collectible on/off");
                         lore.add("<red>⇧ Shift-left: remove this piece");
-                    } else if (has) { icon = e.shown(); lore.add("<gray>Pulled <white>" + n + "×"); }
-                    else if (!tier) { icon = e.shown(); lore.add("<dark_gray>Not pulled yet"); }   // a plain list shows the ITEM, not its capsule
-                    else { icon = Heads.create(e.capsule == null || e.capsule.isBlank() ? r.capsule() : e.capsule); lore.add("<dark_gray>Not pulled yet"); }
+                    } else {
+                        // a plain list (rarity hidden) shows the ITEM itself; otherwise an unpulled piece
+                        // is still a mystery capsule
+                        icon = has || !tier ? e.shown() : Heads.create(e.capsule == null || e.capsule.isBlank() ? r.capsule() : e.capsule);
+                        GachaSpec.Lore lt = spec.lore();
+                        List<String> body = new ArrayList<>(has ? lt.owned() : lt.unowned());
+                        body.addAll(lt.extra());
+                        lore.addAll(prizeLore(body, t, spec, r, e, n, rec, s));
+                    }
                     inv.setItem(9 + i, sk.decorate("gacha_piece", icon, (has || admin ? "<white>" : "<gray>") + e.name, lore, v));
                 }
                 if (h.page > 0) inv.setItem(sk.slot(viewKey, "prev", 48), sk.item("prev", Material.ARROW, "<yellow>◀ Previous page", List.of(), v));
                 if (h.page < pages - 1) inv.setItem(sk.slot(viewKey, "next", 50), sk.item("next", Material.ARROW, "<yellow>Next page ▶", List.of(), v));
-                inv.setItem(sk.slot(viewKey, "back", 45), sk.item("back", Material.BARRIER, "<red>◀ Back", List.of(), v));
+                inv.setItem(sk.slot(viewKey, "back", 45), sk.item("back", Material.BARRIER, admin ? "<red>◀ Back" : "<red>✕ Close", List.of(), v));
+                if (!admin) {
+                    List<String> tell = new ArrayList<>();
+                    tell.add("<gray>A turn costs <white>{price}");
+                    if (spec.show().pity() && !spec.pity().isEmpty()) tell.add("<gray>Guaranteed: <white>" + gacha.pityLine(spec, rec));
+                    tell.add("<dark_gray>Use the machine itself to play.");
+                    inv.setItem(sk.slot(viewKey, "info", 49), sk.item("gacha_info", Material.BOOK, "<aqua>{title}", tell, v));
+                    if (spec.show().odds())
+                        inv.setItem(sk.slot(viewKey, "odds", 51), sk.item("gacha_odds", Material.COMPARATOR, "<aqua>Odds",
+                                List.of("<gray>What each tier is worth.", "<dark_gray>▶ Click"), v));
+                }
                 if (admin) {
                     ItemStack hand = p.getInventory().getItemInMainHand();
                     boolean holding = hand != null && !hand.getType().isAir();
@@ -207,6 +231,44 @@ public final class GachaMenus implements Listener {
         }
     }
 
+    /**
+     * Fill a machine's lore templates for one prize. A line whose placeholders all resolved to nothing is
+     * DROPPED — that is how {@code show:} prunes the rarity, the odds and the guarantee out of the lore
+     * without the author having to write three versions of it.
+     */
+    private List<String> prizeLore(List<String> template, MachineType t, GachaSpec spec, GachaSpec.Rarity r,
+                                   GachaSeries.Entry e, int count, GachaSeries.Record rec, GachaSeries s) {
+        boolean showRarity = spec.show().rarity(), showOdds = spec.show().odds(), showPity = spec.show().pity();
+        String chance = showOdds ? "Chance: " + String.format(java.util.Locale.ROOT, "%.1f", spec.percent(e.rarity)) + "%" : "";
+        String pity = showPity && !spec.pity().isEmpty() ? gacha.pityLine(spec, rec) : "";
+        int owned = 0;
+        for (GachaSeries.Entry x : s.loot()) if (rec.owned.contains(x.id)) owned++;
+        Map<String, String> vars = new LinkedHashMap<>();
+        vars.put("name", e.name);
+        vars.put("rarity", showRarity ? e.rarity : "");
+        vars.put("rarity_label", showRarity ? r.label() + (e.once ? " <dark_gray>· collectible" : "") : "");
+        vars.put("color", showRarity ? r.color() : "white");
+        vars.put("count", String.valueOf(count));
+        vars.put("chance", chance);
+        vars.put("chance_value", showOdds ? String.format(java.util.Locale.ROOT, "%.1f", spec.percent(e.rarity)) : "");
+        vars.put("pity", pity);
+        vars.put("owned", String.valueOf(owned));
+        vars.put("total", String.valueOf(s.loot().size()));
+        vars.put("pulls", String.valueOf(rec.pulls));
+        vars.put("price", gacha.priceText(spec, 1));
+        List<String> out = new ArrayList<>();
+        for (String line : template) {
+            String filled = line;
+            for (Map.Entry<String, String> var : vars.entrySet()) filled = filled.replace("{" + var.getKey() + "}", var.getValue());
+            filled = t.expandTextVars(filled);   // the file's own ${palette} works here too
+            if (!bare(filled).isBlank()) out.add(filled);   // nothing left but formatting: drop it
+        }
+        return out;
+    }
+
+    /** A line with its MiniMessage tags removed — used to spot a line that is now only formatting. */
+    private static String bare(String line) { return line.replaceAll("<[^<>]*>", "").trim(); }
+
     private static ItemStack capsuleIcon(GachaSpec spec, GachaSpec.Rarity r) {
         return r == null || r.capsule().isBlank() ? new ItemStack(Material.HEART_OF_THE_SEA) : Heads.create(r.capsule());
     }
@@ -233,9 +295,17 @@ public final class GachaMenus implements Listener {
                 else if (raw == sk.slot(viewKey, "admin", 49) && p.hasPermission("machineconstruct.admin")) show(p, m, Holder.View.ADMIN, 0, null);
             }
             case COLLECTION, ODDS -> {
-                if (raw == sk.slot(viewKey, "back", 45)) show(p, m, Holder.View.MAIN, 0, null);
+                boolean adm = p.hasPermission("machineconstruct.admin");
+                if (raw == sk.slot(viewKey, "back", 45)) {
+                    // an admin walks back up to the hub; a player came in from the machine itself, so the
+                    // only way out of the contents is out — but the odds screen still steps back to them
+                    if (adm) show(p, m, Holder.View.MAIN, 0, null);
+                    else if (h.view == Holder.View.ODDS) show(p, m, Holder.View.COLLECTION, 0, null);
+                    else p.closeInventory();
+                }
                 else if (raw == sk.slot(viewKey, "prev", 48) && h.page > 0) show(p, m, h.view, h.page - 1, null);
                 else if (raw == sk.slot(viewKey, "next", 50)) show(p, m, h.view, h.page + 1, null);
+                else if (!adm && h.view == Holder.View.COLLECTION && raw == sk.slot(viewKey, "odds", 51)) show(p, m, Holder.View.ODDS, 0, null);
             }
             case RESULT -> { if (raw == sk.slot(viewKey, "back", 49)) p.closeInventory(); }
             case ADMIN -> {

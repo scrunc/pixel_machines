@@ -3272,14 +3272,15 @@ public final class MachineManager implements Listener,
                 jukeboxMenus.open(player, m);
                 return;
             }
-            if (mt.isGacha()) {   // no player GUI: the lever/dial is the interface. A parked capsule opens for its puller; admins get the loading menu.
+            if (mt.isGacha()) {   // the lever/dial is how you PULL; the menu is only ever a window on what is inside.
                 // a crane in play: any click sends the claw down (claw.drop_on_click)
                 if (mt.gacha().isClaw() && claw.busy(m)) {
                     if (mt.gacha().claw().dropOnClick()) claw.drop(player, m);
                     return;
                 }
                 if (gacha.tryOpen(player, m, mt)) return;
-                if (player.hasPermission("machineconstruct.admin") && !player.isSneaking()) gachaMenus.open(player, m);
+                boolean adminView = player.hasPermission("machineconstruct.admin");
+                if (!player.isSneaking() && (adminView || mt.gacha().show().contents())) gachaMenus.open(player, m);
                 else gacha.hint(player, m, mt);
                 return;
             }
