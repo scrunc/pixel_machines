@@ -18,6 +18,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
@@ -156,7 +157,7 @@ public final class GachaMenus implements Listener {
                         body.addAll(lt.extra());
                         lore.addAll(prizeLore(body, t, spec, r, e, n, rec, s));
                     }
-                    inv.setItem(9 + i, sk.decorate("gacha_piece", icon, (has || admin ? "<white>" : "<gray>") + e.name, lore, v));
+                    inv.setItem(9 + i, piece(icon, (has || admin ? "<white>" : "<gray>") + e.name, lore, v));
                 }
                 if (h.page > 0) inv.setItem(sk.slot(viewKey, "prev", 48), sk.item("prev", Material.ARROW, "<yellow>◀ Previous page", List.of(), v));
                 if (h.page < pages - 1) inv.setItem(sk.slot(viewKey, "next", 50), sk.item("next", Material.ARROW, "<yellow>Next page ▶", List.of(), v));
@@ -266,6 +267,24 @@ public final class GachaMenus implements Listener {
             if (!bare(filled).isBlank()) out.add(filled);   // nothing left but formatting: drop it
         }
         return out;
+    }
+
+    /**
+     * A prize in the contents list. The item is the REAL reward, so whatever name and lore it already
+     * carries is what a player should read — an MMOItem's stat block, a crate reward's flavour text, a
+     * renamed tool. The machine's own lines are appended under it, and the entry's name is only used when
+     * the item has no name of its own.
+     */
+    private static ItemStack piece(ItemStack icon, String fallbackName, List<String> add, Map<String, String> vars) {
+        ItemMeta meta = icon.getItemMeta();
+        if (meta == null) return icon;
+        if (!meta.hasDisplayName()) meta.displayName(MenuSkin.mini(MenuSkin.fill(fallbackName, vars)));
+        List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+        if (meta.hasLore() && meta.lore() != null) lore.addAll(meta.lore());
+        for (String line : add) lore.add(MenuSkin.mini(MenuSkin.fill(line, vars)));
+        if (!lore.isEmpty()) meta.lore(lore);
+        icon.setItemMeta(meta);
+        return icon;
     }
 
     /** A line with its MiniMessage tags removed — used to spot a line that is now only formatting. */

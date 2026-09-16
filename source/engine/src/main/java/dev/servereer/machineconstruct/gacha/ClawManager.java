@@ -399,9 +399,11 @@ public final class ClawManager implements Listener {
             GachaSeries.Record rec = gacha.series(ss.spec).record(ss.player);
             int left = Math.max(0, ss.claw.pityGrabs() - rec.sinceGrab);
             boolean tell = ss.spec.show().pity() && ss.claw.pityGrabs() > 0;
-            p.sendMessage(GachaManager.msg(ss.t.skin(), "claw_miss", tell
+            // NOT the same key: `claw_miss` in a machine's skin names the counter, so hiding the
+            // guarantee has to ask for a different line rather than a different default.
+            p.sendMessage(GachaManager.msg(ss.t.skin(), tell ? "claw_miss" : "claw_miss_plain", tell
                             ? "<gray>It slipped. <dark_gray>({left} more and the claw is guaranteed to hold.)"
-                            : "<gray>It slipped.",
+                            : "<gray>It slipped out of the prongs.",
                     MenuSkin.vars("left", String.valueOf(left))));
         }
         sfx(ss, "claw_miss", "block.stone_button.click_off", 0.8f, 0.7f);

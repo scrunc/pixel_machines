@@ -288,6 +288,10 @@ lore:
   extra:   ["<dark_gray>{chance}", "<dark_gray>{pity}"]      # appended to both
 ```
 
+The prize keeps **its own display name and lore** — an MMOItem's stats, a crate reward's flavour text, a
+renamed tool — and the machine's lines are appended under them; the entry's name is only used when the item
+has none of its own.
+
 `{name}` · `{rarity}` · `{rarity_label}` · `{color}` · `{count}` (times pulled) · `{chance}` (the whole
 "Chance: 4.2%", or `{chance_value}` for the bare number) · `{pity}` (that player's guarantees) · `{owned}`
 · `{total}` · `{pulls}` · `{price}`. With `show.rarity: false` the rarity placeholders resolve to nothing,
@@ -325,6 +329,12 @@ same for the forced hold.
 **What a player is told (`show:`)** — a machine can be a plain vending machine or show its whole hand.
 None of this changes a roll; the rarities still drive weights, colours and the theatre, they are simply
 not narrated. **Admins always see everything**, so a machine can be tuned with its shutters down.
+
+A hidden line uses a DIFFERENT message key, not a different default — `landed_plain` / `got_plain` /
+`claw_miss_plain` — so a skin that writes the tier or the counter into its own `landed` / `got` /
+`claw_miss` cannot leak what the switches are hiding. The luck board prunes the same way: `{pity}` and
+`{grabs}` (which carries its own words, like `{chance}`) resolve to nothing, and a board line left with
+only formatting is dropped.
 
 ```yaml
 show:

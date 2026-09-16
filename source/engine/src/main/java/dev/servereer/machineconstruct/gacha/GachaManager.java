@@ -266,9 +266,10 @@ public final class GachaManager {
         } else {
             cues.play(m, pullCue, vars, p, () -> {
                 sfx(m, spec, "land", centre, Sfx.one("block.copper_bulb.turn_on", 0.7, "1.2"), vars);
-                if (waiting.get(m) == nw) p.sendMessage(msg(sk, "landed", spec.show().rarity()
-                        ? "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it."
-                        : "<aqua>A capsule landed — right-click the flap to open it.", vars));
+                if (waiting.get(m) == nw) p.sendMessage(msg(sk, spec.show().rarity() ? "landed" : "landed_plain",
+                        spec.show().rarity()
+                                ? "<aqua>A <white>{rarity_label}</white> capsule landed — right-click the flap to open it."
+                                : "<aqua>A capsule landed — right-click the flap to open it.", vars));
             });
         }
         return true;
@@ -333,7 +334,7 @@ public final class GachaManager {
         if (p != null) {
             if (w.results.size() == 1) {
                 Result r = w.results.get(0);
-                p.sendMessage(msg(sk, "got", spec.show().rarity()
+                p.sendMessage(msg(sk, spec.show().rarity() ? "got" : "got_plain", spec.show().rarity()
                         ? "<aqua>✦ <{color}>{rarity_label}</{color}> — <white>{name}</white>"
                         : "<aqua>✦ <white>{name}</white>", vars(p, spec, r)));
             } else host.showResults(p, m, w.results);
@@ -399,14 +400,26 @@ public final class GachaManager {
         int own = 0;
         for (GachaSeries.Entry e : s.loot()) if (rec.owned.contains(e.id)) own++;
         ClawSpec c = spec.claw();
-        String grabs = c == null || c.pityGrabs() <= 0 ? "-" : String.valueOf(Math.max(1, c.pityGrabs() - rec.sinceGrab));
-        return template
-                .replace("{pity}", !spec.show().pity() ? "" : spec.pity().isEmpty() ? "<dark_gray>no guarantees here" : pityLine(spec, rec))
-                .replace("{grabs}", grabs)
+        boolean tellPity = spec.show().pity();
+        String left = c == null || c.pityGrabs() <= 0 ? "" : String.valueOf(Math.max(1, c.pityGrabs() - rec.sinceGrab));
+        // {grabs} carries its own words, like {chance} in the lore, so hiding the guarantee empties the
+        // whole phrase rather than leaving "sure grab in" dangling with nothing after it.
+        String filled = template
+                .replace("{pity}", !tellPity ? "" : spec.pity().isEmpty() ? "<dark_gray>no guarantees here" : pityLine(spec, rec))
+                .replace("{grabs}", tellPity && !left.isEmpty() ? "sure grab in <white>" + left : "")
+                .replace("{grabs_value}", tellPity ? left : "")
                 .replace("{player}", who)
                 .replace("{pulls}", String.valueOf(rec.pulls))
                 .replace("{owned}", String.valueOf(own))
                 .replace("{total}", String.valueOf(s.loot().size()));
+        // a board line left with nothing but formatting is dropped, so a hidden guarantee leaves no gap
+        StringBuilder out = new StringBuilder();
+        for (String line : filled.split("\n", -1)) {
+            if (line.replaceAll("<[^<>]*>", "").trim().isEmpty()) continue;
+            if (out.length() > 0) out.append('\n');
+            out.append(line);
+        }
+        return out.toString();
     }
 
     /** Auto-open parked capsules after {@code open_after} seconds. */
