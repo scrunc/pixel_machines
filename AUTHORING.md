@@ -357,6 +357,12 @@ model:
 It refreshes every 1.5 s, and immediately after a pull or a claw attempt, so the counter visibly
 moves while the theatre is still playing. A machine with no `pity` part simply has no board.
 
+**Coins cannot be placed.** Every coin is a player head, so without this a coin could be stuck on a wall,
+where it stops being a coin — the block keeps the skin and loses the tag that made it worth anything, and
+breaking it back gives a plain head. `CoinGuard` cancels placement (and dispensers) for ladder coins and for
+a series' own custom coin; `placeable: true` in `coins.yml` allows it anyway, with `place-message` for what
+the player is told.
+
 **Coins**: the engine ships a ten-tier coin ladder (`plugins/MachineConstruct/coins.yml`: common …
 leviathan, each a tagged coin head — rename / recolour / retexture there). `price: { coins: 1, coin:
 rare }` charges that tier; `/mc coin give <player> <n> <tier>` pays them out (quests, votes, kits);

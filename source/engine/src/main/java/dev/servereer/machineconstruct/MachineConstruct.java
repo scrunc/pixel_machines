@@ -120,6 +120,8 @@ public final class MachineConstruct extends JavaPlugin implements MachineConstru
                 trackLibrary, playlistLibrary, musicPlayer, discItem);
         // machines may play real audio files as sound effects (`sfx: { track: … }`), not only vanilla keys
         machines.gacha().useAudio(trackLibrary, musicAudio);
+        // coins are currency, not blocks: refuse to let one be placed as a head (coins.yml `placeable`)
+        getServer().getPluginManager().registerEvents(new dev.servereer.machineconstruct.gacha.CoinGuard(machines.gacha()), this);
         machines.start();
 
         // PixelProfiler shop-price bridge: prefer /shop's sell price for auto-sell/vault value,

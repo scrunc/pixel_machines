@@ -46,6 +46,8 @@ public final class Coins {
 
     private final Plugin plugin;
     private final NamespacedKey key;
+    private boolean placeable;          // coins.yml: may a coin be stuck on a wall as a head?
+    private String placeMessage = "<yellow>That is a coin, not a building block.";
     private final Map<String, Tier> tiers = new LinkedHashMap<>();
 
     public Coins(Plugin plugin) {
@@ -55,6 +57,10 @@ public final class Coins {
     }
 
     public NamespacedKey pdcKey() { return key; }
+    /** Whether a coin may be PLACED as a head block. Off by default — see {@link CoinGuard}. */
+    public boolean placeable() { return placeable; }
+    /** What a player is told when they try. */
+    public String placeMessage() { return placeMessage; }
     public List<String> keys() { return new ArrayList<>(tiers.keySet()); }
     public Tier tier(String k) { return k == null ? null : tiers.get(k.toLowerCase()); }
 
@@ -85,6 +91,8 @@ public final class Coins {
         File f = new File(plugin.getDataFolder(), "coins.yml");
         if (!f.exists()) writeDefaults(f);
         YamlConfiguration y = YamlConfiguration.loadConfiguration(f);
+        placeable = y.getBoolean("placeable", false);
+        placeMessage = y.getString("place-message", placeMessage);
         ConfigurationSection cs = y.getConfigurationSection("coins");
         if (cs != null) for (String k : cs.getKeys(false)) {
             ConfigurationSection one = cs.getConfigurationSection(k);
@@ -108,7 +116,11 @@ public final class Coins {
         YamlConfiguration y = new YamlConfiguration();
         y.options().header("The coin ladder — ten tiered tokens capsule machines take (price: { coins: 1, coin: <key> }).\n"
                 + "name / color are MiniMessage-ish (#hex); texture is a player-head textures value or URL. Keys are the\n"
-                + "order of the ladder (worst → best). /mc coin give <player> <n> <key> hands them out; /mc reload re-reads.");
+                + "order of the ladder (worst → best). /mc coin give <player> <n> <key> hands them out; /mc reload re-reads.\n\n"
+                + "placeable: a coin is a player head, and a head is placeable — stick one on a wall and it stops\n"
+                + "being a coin (the block keeps the skin, loses the tag). Left false, placing one is refused.");
+        y.set("placeable", false);
+        y.set("place-message", "<yellow>That is a coin, not a building block.");
         for (String[] d : DEFAULTS) {
             ConfigurationSection one = y.createSection("coins." + d[0]);
             one.set("name", d[1]); one.set("color", d[2]); one.set("texture", d[3]);
