@@ -21,12 +21,15 @@ build:
   system: gradle                 # Gradle 9 multi-project, Kotlin DSL, gradlew + Shadow
   java: 21
   command: ./gradlew shadowJar   # builds BOTH jars
-depends: none                    # engine has zero hard external deps
+depends: none                    # engine has zero HARD external deps
+audio-depends: [PixelAudio]      # music + machine sfx play through its shared SVC/ffmpeg services
+                                 # (github.com/scrunc/pixelaudio); absent = everything is silent, nothing breaks
 shaded:                          # relocated under dev.servereer.machineconstruct.libs.*
   - packetevents                 # packet send/track (relocated; no clash with server copy)
   - sqlite-jdbc                  # default storage backend
   - h2                           # optional storage backend
 optional-hooks:                  # reflective, gracefully skipped if absent
+  - PixelAudio                   # audio core: SVC streams + the shared ffmpeg/yt-dlp (MediaTools)
   - GriefPrevention
   - WorldGuard
   - PlaceholderAPI

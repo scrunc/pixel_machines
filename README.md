@@ -94,7 +94,15 @@ Add a `.yml` there, run `/mc reload`, and `/mc give <machine>` hands you its pla
 are live; only engine Java changes need a restart.
 
 Requires Paper (or a fork — developed against Leaf 1.21.x / 26.x) and PacketEvents. Everything else
-— Vault, PlaceholderAPI, GriefPrevention, Simple Voice Chat — is optional and probed at runtime.
+— Vault, PlaceholderAPI, GriefPrevention — is optional and probed at runtime.
+
+**Anything that makes a noise needs [PixelAudio](https://github.com/scrunc/pixelaudio)**, plus
+[Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) under it. This engine carries no
+audio core of its own: jukeboxes, the radio, and machine sound effects that play real audio files all
+go through PixelAudio's shared services, and its `plugins/PixelAudio/bin/ffmpeg` is what decodes a
+track. Without it MachineConstruct loads and runs normally — tracks still download and save, machines
+still work — everything simply plays silently, and the boot log says why. (Players also need the SVC
+client mod to hear anything at all; that is the usual reason a correct server is still quiet.)
 
 ## Repository layout
 
